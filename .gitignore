@@ -1,0 +1,19 @@
+# Segredos
+.env
+
+# Dados brutos e banco (grandes; não versionar)
+data/*.csv
+data/*.db
+
+# Saídas geradas
+logs/*.jsonl
+reports/*.png
+reports/*.md
+reports/*.pdf
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
