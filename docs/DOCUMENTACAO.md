@@ -416,8 +416,12 @@ critério "mecanismos de auditoria e registro de decisões dos agentes".
   descartada** — ela é mantida e recebe uma observação nomeando o valor suspeito e
   pedindo conferência. Descartar a análise inteira por causa de um número seria pior
   para o usuário do que mostrá-la com um alerta honesto.
-- `validar_sem_dado_sensivel(texto)` / `sanitizar_saida(texto)`: verificam e
-  **mascaram** identificadores (ex.: CPF) na saída, como última barreira.
+- `validar_sem_dado_sensivel(texto)` / `sanitizar_saida(texto)`: **rede de segurança
+  na saída** — varrem o texto **gerado pelo LLM** e mascaram qualquer coisa com
+  formato de CPF ou nome individual. Atenção: isso **não** é porque a entrada tenha
+  identificadores (ela já vem anonimizada — ver 4.3); é defesa em profundidade, para
+  o caso de o modelo inventar um valor ou de uma fonte futura ser menos limpa. Por
+  isso quase nunca dispara.
 
 ### 4.3 Dados sensíveis / LGPD
 Ver também a seção 2.5. Em resumo, três camadas: **minimização** (só ~17 de 194
@@ -427,6 +431,11 @@ contagens e taxas, nunca um indivíduo). O LLM jamais recebe linhas de paciente 
 métricas agregadas e manchetes. Além disso, as bases do DATASUS já vêm anonimizadas
 (sem nome/CPF/CNS) por força da Lei 13.709/2018; nosso tratamento é defesa em
 profundidade sobre os **quase-identificadores** que restam.
+
+São **camadas distintas** e complementares, não redundância: a anonimização e a
+minimização (4.3) garantem que nenhum identificador direto **entra** no pipeline; o
+mascaramento de saída (`sanitizar_saida`, 4.2) protege o que **sai** do LLM. Uma é
+sobre o dado de entrada; a outra, sobre o texto gerado.
 
 ---
 

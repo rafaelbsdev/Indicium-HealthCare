@@ -128,15 +128,22 @@ disse.
   guardrail **não afirma que está errado** (não temos essa certeza) e **não
   descarta a análise** — ele preserva o texto e acrescenta uma **observação**
   nomeando o valor não verificado, para o leitor conferir.
-- *Dados sensíveis* — bloqueia/mascara CPF e nomes individuais na saída.
+- *Dados sensíveis (rede de segurança na saída)* — mesmo com o dado entrando já
+  anonimizado, o guardrail ainda varre o texto **gerado pelo LLM** e mascara
+  qualquer coisa com formato de CPF ou nome individual. É defesa em profundidade —
+  não porque a entrada tenha identificadores, mas para o caso de o modelo inventar
+  um valor ou de uma fonte futura ser menos limpa.
 
 **Dados sensíveis (LGPD).** As bases do DATASUS já vêm **anonimizadas** (Lei
 13.709/2018), sem nome/CPF/CNS. Ainda restam **quase-identificadores** (data de
 nascimento, sexo, raça, município, ocupação). Como defesa em profundidade: (a)
 carregamos só as colunas necessárias — ocupação nem entra; (b) na ingestão,
 `DT_NASC` é **generalizada para só o ano** e dia/mês são descartados; (c)
-trabalhamos sempre de forma agregada; e (d) validamos a saída do LLM contra
-vazamento de identificadores. O LLM nunca recebe linhas de paciente.
+trabalhamos sempre de forma agregada; e (d) como **rede de segurança**, ainda
+mascaramos na saída do LLM qualquer coisa com formato de CPF/nome — mesmo a entrada
+já não tendo esses campos. São camadas distintas: a anonimização (a–c) garante que
+nenhum identificador **entra**; o mascaramento (d) protege o que **sai**. O LLM
+nunca recebe linhas de paciente.
 
 ---
 
