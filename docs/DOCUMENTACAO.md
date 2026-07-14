@@ -374,6 +374,19 @@ O agente orquestrador (LangGraph + Claude).
     descartada**; ela é preservada e ganha uma observação nomeando o valor não
     verificado (ver política do guardrail na seção 4).
   Todos os caminhos são registrados na auditoria.
+- `comentar_metricas_via_agente(resultado, auditor)`: o **modo agente**. Em vez de um
+  prompt fixo, executa o **agente ReAct (LangGraph)**, que decide sozinho chamar as
+  tools (`consultar_metricas`, `consultar_noticias`) e escreve a análise. A saída
+  passa pelo **mesmo** pós-processamento de guardrails (`_pos_processar_analise`:
+  mascaramento + anti-alucinação com preservar-e-sinalizar), e os mesmos avisos
+  honestos valem quando não há chave ou o agente falha.
+- `_pos_processar_analise(...)`: os guardrails de saída compartilhados pelos dois
+  modos — garante que determinístico e agente têm exatamente a mesma proteção.
+
+A página escolhe o modo por um parâmetro: `report.construir_conteudo(modo=...)` e a
+rota `/conteudo?modo=agente` (via `app.py`), com um **seletor "Modo agente"** no
+cabeçalho. O **determinístico** é o padrão (previsível e testável); o agente é a
+opção "100% agêntica" pedida pelo enunciado.
 
 ### `report.py`
 **Constrói o HTML do relatório** e o devolve como **string** — nada é escrito em

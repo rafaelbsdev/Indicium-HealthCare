@@ -35,7 +35,7 @@ dependências, testes e riscos de cada uma. Serve como roteiro de implementaçã
 | 3 | Atualização automática do banco vivo ✅ | 1 Dados/Perf | M | médio | 1 |
 | 4 | Guardrail anti prompt-injection (notícias) ✅ | 2 Segurança | S | baixo | — |
 | 5 | Mascaramento ampliado + retenção de auditoria ✅ | 2 Segurança | S | baixo | — |
-| 6 | Modo agente unificado na página | 3 Agente | M | médio | — |
+| 6 | Modo agente unificado na página ✅ | 3 Agente | M | médio | — |
 | 7 | RAG mais forte (fontes + grounding) | 3 Agente | M | médio | 4 |
 | 8 | Avaliação automatizada (tracing/regressão/backtest) | 3 Agente | M | baixo | 6,7 |
 | 9 | Métrica de UTI real (CNES) + IC/suavização | 4 Métricas/UX | L | médio | 1 |
@@ -141,7 +141,7 @@ qualidade/CI (11), que trava tudo o que foi feito.
 
 ## Fase 3 — Inteligência do agente
 
-### 6. Modo agente unificado na página
+### 6. Modo agente unificado na página  ✅ CONCLUÍDO
 - **O que muda**: além do caminho determinístico, a página pode ser gerada pelo
   **agente ReAct (LangGraph)**, que decide as tools sozinho, com os mesmos guardrails
   e auditoria. Um parâmetro/rota escolhe o modo.

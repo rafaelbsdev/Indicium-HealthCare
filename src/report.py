@@ -5,7 +5,7 @@ import pandas as pd
 import agregados, rag, guardrails
 from data_pipeline import ler_meta
 from audit import Auditor
-from agent import comentar_metricas
+from agent import comentar_metricas, comentar_metricas_via_agente
 from tools.news_tool import (buscar_noticias, noticias_como_texto,
                              noticias_como_html, ordenar_por_data)
 from knowledge import DICIONARIO_CAMPOS
@@ -141,7 +141,7 @@ def _resolver_ref(min_d, max_d, data_ref):
     return d, ""
 
 
-def construir_conteudo(data_ref=None):
+def construir_conteudo(data_ref=None, modo="deterministico"):
     aud = Auditor()
     aud.registrar("inicio_html", data_ref=data_ref)
     min_d, max_d = agregados.intervalo_datas()
@@ -168,7 +168,11 @@ def construir_conteudo(data_ref=None):
     contexto = rag.montar_contexto(corpus, CONSULTA_RAG, k=4)
     aud.tool_resultado("rag_contexto", f"{len(corpus)} documentos indexados")
 
-    comentario = _md_para_html(comentar_metricas(res, contexto, aud))
+    if modo == "agente":
+        bruto = comentar_metricas_via_agente(res, aud)
+    else:
+        bruto = comentar_metricas(res, contexto, aud)
+    comentario = _md_para_html(bruto)
     ntxt = _secao_noticias(noticias)
     aviso_html = f'<div class="aviso">⚠ {aviso}</div>' if aviso else ""
 
@@ -213,6 +217,7 @@ def construir_pagina():
   <div class="toolbar">
     <div class="picker"><label>Data de referência:</label>
       <input id="dt" type="date" value="{latest}" min="{min_d.date()}" max="{max_d.date()}"></div>
+    <label class="picker"><input type="checkbox" id="modo-agente"> Modo agente</label>
     <a id="btn-atualizar" class="btn" href="#">↻ Atualizar dados</a>
   </div>
 </div>
@@ -224,7 +229,8 @@ Notícias são fontes externas usadas como contexto.</footer>
 function carregar(data, atualizar){{
   var alvo=document.getElementById("conteudo");
   alvo.innerHTML='<div class="carregando"><div class="spin"></div><p>Carregando o relatório…</p></div>';
-  var q="?data="+encodeURIComponent(data)+(atualizar?"&atualizar=1":"");
+  var modo=document.getElementById("modo-agente").checked?"agente":"deterministico";
+  var q="?data="+encodeURIComponent(data)+"&modo="+modo+(atualizar?"&atualizar=1":"");
   fetch("/conteudo"+q).then(function(r){{return r.text();}}).then(function(h){{
     alvo.innerHTML=h;
     alvo.querySelectorAll("script").forEach(function(o){{
@@ -234,6 +240,7 @@ function carregar(data, atualizar){{
 }}
 var dt=document.getElementById("dt");
 dt.addEventListener("change", function(){{ carregar(dt.value, false); }});
+document.getElementById("modo-agente").addEventListener("change", function(){{ carregar(dt.value, false); }});
 document.getElementById("btn-atualizar").addEventListener("click", function(e){{
   e.preventDefault(); carregar(dt.value, true);
 }});

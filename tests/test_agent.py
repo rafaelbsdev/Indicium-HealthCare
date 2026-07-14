@@ -52,3 +52,33 @@ def test_registra_auditoria(df_limpo, pastas_temporarias, monkeypatch):
     a = Auditor()
     agent.comentar_metricas(_res(df_limpo), "x", a)
     assert "llm_decision" in a.caminho.read_text(encoding="utf-8")
+
+
+def test_agente_sem_api_gera_aviso(df_limpo, pastas_temporarias, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    t = agent.comentar_metricas_via_agente(_res(df_limpo))
+    assert "indisponível" in t.lower()
+
+
+def test_agente_usa_texto_e_pos_processa(df_limpo, pastas_temporarias, monkeypatch):
+    monkeypatch.setattr(agent, "_get_api_key", lambda: "fake")
+    monkeypatch.setattr(agent, "_invocar_agente", lambda p: "Mortalidade de 37.50%.")
+    t = agent.comentar_metricas_via_agente(_res(df_limpo))
+    assert "37.50%" in t and "bservação" not in t and "indisponível" not in t.lower()
+
+
+def test_agente_numero_inventado_mantem_com_aviso(df_limpo, pastas_temporarias, monkeypatch):
+    monkeypatch.setattr(agent, "_get_api_key", lambda: "fake")
+    monkeypatch.setattr(agent, "_invocar_agente", lambda p: "A taxa foi de 95.00% neste período.")
+    t = agent.comentar_metricas_via_agente(_res(df_limpo))
+    assert "95.00%" in t and "bservação" in t
+
+
+def test_agente_falha_vira_aviso(df_limpo, pastas_temporarias, monkeypatch):
+    monkeypatch.setattr(agent, "_get_api_key", lambda: "fake")
+
+    def explode(p):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(agent, "_invocar_agente", explode)
+    assert "indisponível" in agent.comentar_metricas_via_agente(_res(df_limpo)).lower()

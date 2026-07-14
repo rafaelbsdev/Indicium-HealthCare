@@ -57,14 +57,44 @@ def comentar_metricas(resultado, noticias_texto, auditor=None):
         auditor.erro("comentar_metricas", f"Falha ao chamar o LLM: {e}")
         return _aviso_indisponivel(f"Falha ao consultar o LLM ({e}).")
 
-    texto = gr.sanitizar_saida(texto)  # dado sensível (CPF) é sempre mascarado
+    return _pos_processar_analise(texto, permitidos, auditor)
+
+
+def _pos_processar_analise(texto, permitidos, auditor):
+    texto = gr.sanitizar_saida(texto)
     cs = gr.validar_sem_dado_sensivel(texto)
     auditor.guardrail("dados_sensiveis", cs.aprovado, cs.motivo)
     cn = gr.validar_numeros_do_texto(texto, permitidos)
     auditor.guardrail("anti_alucinacao", cn.aprovado, cn.motivo)
     if not cn.aprovado:
-        # Não descartamos a análise: preservamos e sinalizamos o número não verificado.
         auditor.decisao_llm("Número não verificado sinalizado na análise.")
         texto += ("\n\n**Observação:** " + cn.motivo +
                   " Confira esse dado diretamente nas métricas antes de utilizá-lo.")
     return texto
+
+
+def _invocar_agente(prompt):
+    resposta = construir_agente_react().invoke({"messages": [("user", prompt)]})
+    ultimo = resposta["messages"][-1]
+    conteudo = getattr(ultimo, "content", ultimo)
+    return conteudo if isinstance(conteudo, str) else str(conteudo)
+
+
+def comentar_metricas_via_agente(resultado, auditor=None):
+    auditor = auditor or Auditor()
+    permitidos = {round(m.valor, 2) for m in resultado.metricas.values() if m.valor is not None}
+    if not _get_api_key():
+        auditor.decisao_llm("Sem ANTHROPIC_API_KEY: análise (agente) indisponível.")
+        return _aviso_indisponivel(
+            "A chave ANTHROPIC_API_KEY não está configurada. Configure-a no arquivo "
+            ".env e instale as dependências para gerar a análise com o Claude.")
+    prompt = (f"Gere a Análise do Cenário de SRAG para a data {resultado.data_referencia.date()}. "
+              f"Use as ferramentas para obter as métricas e as notícias, cite apenas os valores "
+              f"exatos retornados pelas métricas e escreva 2-3 parágrafos.")
+    auditor.decisao_llm("Executando agente ReAct para a análise.")
+    try:
+        texto = _invocar_agente(prompt)
+    except Exception as e:
+        auditor.erro("comentar_metricas_via_agente", f"Falha no agente: {e}")
+        return _aviso_indisponivel(f"Falha ao executar o agente ({e}).")
+    return _pos_processar_analise(texto, permitidos, auditor)

@@ -8,10 +8,10 @@ from report import construir_pagina, construir_conteudo
 _CACHE = {}
 
 
-def renderizar_conteudo(atualizar=False, data_ref=None):
-    chave = data_ref or "padrao"
+def renderizar_conteudo(atualizar=False, data_ref=None, modo="deterministico"):
+    chave = (data_ref or "padrao", modo)
     if atualizar or chave not in _CACHE:
-        _CACHE[chave] = construir_conteudo(data_ref=data_ref)
+        _CACHE[chave] = construir_conteudo(data_ref=data_ref, modo=modo)
     return _CACHE[chave]
 
 
@@ -31,8 +31,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif partes.path == "/conteudo":
             qs = parse_qs(partes.query)
             data_ref = qs.get("data", [None])[0] or None
+            modo = qs.get("modo", ["deterministico"])[0] or "deterministico"
             atualizar = "atualizar" in qs
-            self._responder(renderizar_conteudo(atualizar=atualizar, data_ref=data_ref))
+            self._responder(renderizar_conteudo(atualizar=atualizar, data_ref=data_ref, modo=modo))
         else:
             self.send_error(404)
 

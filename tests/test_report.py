@@ -89,3 +89,10 @@ def test_injecao_em_noticia_e_auditada(db_temporario, pastas_temporarias, monkey
     report.construir_conteudo()
     log = (pastas_temporarias["logs"] / "audit.jsonl").read_text(encoding="utf-8")
     assert "prompt_injection" in log
+
+
+def test_conteudo_modo_agente_usa_o_agente(db_temporario, pastas_temporarias, monkeypatch):
+    _indisponivel(monkeypatch)
+    monkeypatch.setattr(report, "comentar_metricas_via_agente", lambda res, aud=None: "ANALISE VIA AGENTE")
+    frag = report.construir_conteudo(modo="agente")
+    assert "ANALISE VIA AGENTE" in frag
