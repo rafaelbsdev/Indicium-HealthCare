@@ -32,9 +32,9 @@ dependências, testes e riscos de cada uma. Serve como roteiro de implementaçã
 |---|------|------|----------|-------|-----------|
 | 1 | Pré-agregação na ingestão ✅ | 1 Dados/Perf | M | médio | — |
 | 2 | Migração p/ DuckDB + Parquet | 1 Dados/Perf | L | alto | 1 |
-| 3 | Atualização automática do banco vivo | 1 Dados/Perf | M | médio | 1 |
-| 4 | Guardrail anti prompt-injection (notícias) | 2 Segurança | S | baixo | — |
-| 5 | Mascaramento ampliado + retenção de auditoria | 2 Segurança | S | baixo | — |
+| 3 | Atualização automática do banco vivo ✅ | 1 Dados/Perf | M | médio | 1 |
+| 4 | Guardrail anti prompt-injection (notícias) ✅ | 2 Segurança | S | baixo | — |
+| 5 | Mascaramento ampliado + retenção de auditoria ✅ | 2 Segurança | S | baixo | — |
 | 6 | Modo agente unificado na página | 3 Agente | M | médio | — |
 | 7 | RAG mais forte (fontes + grounding) | 3 Agente | M | médio | 4 |
 | 8 | Avaliação automatizada (tracing/regressão/backtest) | 3 Agente | M | baixo | 6,7 |
@@ -88,7 +88,7 @@ qualidade/CI (11), que trava tudo o que foi feito.
 - **Critério**: Arquitetura. **DoD**: suíte verde sobre DuckDB, Parquet gerados,
   memória/tempo medidos e documentados.
 
-### 3. Atualização automática do banco vivo
+### 3. Atualização automática do banco vivo  ✅ CONCLUÍDO
 - **O que muda**: um job agendado (semanal) baixa os CSVs dos anos vivos (2025/2026),
   reconstrói o banco e registra a data; a página mostra "última atualização".
 - **Por quê**: o enunciado pede visão "em tempo real"; hoje o refresh é manual.
@@ -109,7 +109,7 @@ qualidade/CI (11), que trava tudo o que foi feito.
 
 ## Fase 2 — Segurança e governança
 
-### 4. Guardrail anti prompt-injection nas notícias
+### 4. Guardrail anti prompt-injection nas notícias  ✅ CONCLUÍDO
 - **O que muda**: antes de mandar manchetes ao LLM/RAG, um guardrail as trata como
   **dado, não instrução**: remove/neutraliza padrões de injeção ("ignore as
   instruções", delimitadores, etc.) e encapsula o conteúdo como citação.
@@ -125,7 +125,7 @@ qualidade/CI (11), que trava tudo o que foi feito.
 - **Critério**: Guardrails, Governança. **DoD**: testes de injeção verdes, evento de
   auditoria emitido, prompt final comprovadamente sem instruções externas.
 
-### 5. Mascaramento ampliado + retenção de auditoria
+### 5. Mascaramento ampliado + retenção de auditoria  ✅ CONCLUÍDO
 - **O que muda**: `sanitizar_saida` passa a mascarar também **CNS, telefone e e-mail**
   (não só CPF); o `Auditor` ganha **rotação/retenção** do `audit.jsonl` (tamanho/data).
 - **Arquivos**: `src/guardrails.py` (novos padrões), `src/audit.py` (rotação).

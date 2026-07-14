@@ -16,3 +16,13 @@ def test_guardrail_reprovado(pastas_temporarias):
     a = Auditor(); a.guardrail("r", aprovado=False, motivo="falhou")
     obj = json.loads(a.caminho.read_text(encoding="utf-8").strip())
     assert obj["aprovado"] is False and obj["motivo"] == "falhou"
+
+
+def test_auditoria_rotaciona_por_tamanho(pastas_temporarias):
+    import audit
+    a = audit.Auditor(max_bytes=10)
+    a.registrar("e1", x=1)
+    a.registrar("e2", x=2)
+    logs = pastas_temporarias["logs"]
+    assert len(list(logs.glob("audit.*.jsonl"))) >= 1          # gerou arquivo rotacionado
+    assert (logs / "audit.jsonl").read_text(encoding="utf-8").count("\n") == 1

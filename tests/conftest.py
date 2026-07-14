@@ -36,6 +36,7 @@ def db_temporario(tmp_path, df_limpo, monkeypatch):
     with sqlite3.connect(db) as c:
         enriquecido.to_sql("srag", c, if_exists="replace", index=False)
         data_pipeline.construir_agregados(c)
+        data_pipeline.registrar_meta(c, "construido_em", "2024-06-15T10:00:00")
     monkeypatch.setattr(metrics, "DB_PATH", db)
     monkeypatch.setattr(data_pipeline, "DB_PATH", db)
     monkeypatch.setattr(agregados, "DB_PATH", db)

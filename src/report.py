@@ -2,7 +2,8 @@ import base64
 import re
 from datetime import datetime
 import pandas as pd
-import agregados, rag
+import agregados, rag, guardrails
+from data_pipeline import ler_meta
 from audit import Auditor
 from agent import comentar_metricas
 from tools.news_tool import (buscar_noticias, noticias_como_texto,
@@ -156,7 +157,14 @@ def construir_conteudo(data_ref=None):
         aud.erro("buscar_noticias", str(e))
     aud.tool_resultado("consultar_noticias", f"{len(noticias)} manchetes")
 
-    corpus = [f"{n.titulo} ({n.fonte})" for n in noticias] + DICIONARIO_CAMPOS
+    externos, neutralizados = [], 0
+    for n in noticias:
+        limpo = guardrails.sanitizar_conteudo_externo(f"{n.titulo} ({n.fonte})")
+        externos.append(limpo.texto)
+        neutralizados += 1 if limpo.alterado else 0
+    if neutralizados:
+        aud.guardrail("prompt_injection", False, f"{neutralizados} manchete(s) neutralizada(s) antes do LLM")
+    corpus = externos + DICIONARIO_CAMPOS
     contexto = rag.montar_contexto(corpus, CONSULTA_RAG, k=4)
     aud.tool_resultado("rag_contexto", f"{len(corpus)} documentos indexados")
 
@@ -164,8 +172,10 @@ def construir_conteudo(data_ref=None):
     ntxt = _secao_noticias(noticias)
     aviso_html = f'<div class="aviso">⚠ {aviso}</div>' if aviso else ""
 
+    atualizado = ler_meta("construido_em")
+    selo = f" · Base atualizada em {atualizado.replace('T', ' ')}" if atualizado else ""
     frag = f"""<div class="meta">Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')} ·
-Data de referência dos dados: {ref.date()} · Casos (últimos 12 meses): {res.total_casos}</div>
+Data de referência dos dados: {ref.date()} · Casos (últimos 12 meses): {res.total_casos}{selo}</div>
 {aviso_html}
 <h2>Métricas principais</h2>
 <div class="cards">{_cards(res)}</div>

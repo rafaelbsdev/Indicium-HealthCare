@@ -8,10 +8,15 @@ def main():
     p = argparse.ArgumentParser(description="Agente de relatório de SRAG")
     p.add_argument("--construir-banco", action="store_true")
     p.add_argument("--agente", metavar="PERGUNTA", default=None)
+    p.add_argument("--atualizar", action="store_true")
     a = p.parse_args()
     if a.construir_banco:
         from data_pipeline import executar_pipeline
         executar_pipeline()
+        return
+    if a.atualizar:
+        from atualizar_dados import atualizar
+        print(atualizar())
         return
     if a.agente:
         from agent import construir_agente_react

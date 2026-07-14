@@ -34,3 +34,12 @@ def test_main_agente(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["main", "--agente", "x"])
     main.main()
     assert "resposta do agente" in capsys.readouterr().out
+
+
+def test_main_atualizar(monkeypatch):
+    import atualizar_dados
+    chamado = {}
+    monkeypatch.setattr(atualizar_dados, "atualizar", lambda: chamado.setdefault("ok", True) or {"registros": 1})
+    monkeypatch.setattr(sys, "argv", ["main", "--atualizar"])
+    main.main()
+    assert chamado.get("ok") is True

@@ -1,12 +1,13 @@
 import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 import pandas as pd
 from config import (RAW_CSV_PATH, RAW_CSV_DIR, RAW_CSV_GLOB, CHUNKSIZE, DB_PATH, TABLE_NAME,
                     COLUNAS_USADAS, COLUNAS_DATA, COLUNAS_SENSIVEIS_REMOVER, TP_IDADE_ANO,
                     EVOLUCAO_OBITOS, EVOLUCAO_DESFECHO_CONHECIDO, SIM, NAO,
                     FAIXAS_ETARIAS_LIMITES, FAIXAS_ETARIAS_ROTULOS,
-                    AGG_DIARIO, AGG_FAIXA, AGG_UF, AGG_VIRUS)
+                    AGG_DIARIO, AGG_FAIXA, AGG_UF, AGG_VIRUS, META_TABLE)
 
 _COLS = set(COLUNAS_USADAS)
 
@@ -114,6 +115,21 @@ def _liberar_cache_do_disco(caminho):
             pass
 
 
+def registrar_meta(conn, chave, valor):
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {META_TABLE} (chave TEXT PRIMARY KEY, valor TEXT)")
+    conn.execute(f"INSERT OR REPLACE INTO {META_TABLE} (chave, valor) VALUES (?, ?)", (chave, str(valor)))
+    conn.commit()
+
+
+def ler_meta(chave):
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            linha = conn.execute(f"SELECT valor FROM {META_TABLE} WHERE chave = ?", (chave,)).fetchone()
+        return linha[0] if linha else None
+    except sqlite3.DatabaseError:
+        return None
+
+
 def construir_agregados(conn):
     cur = conn.cursor()
     cur.executescript(f"""
@@ -166,6 +182,7 @@ def executar_pipeline(caminhos=None, substituir=True):
         print(f"[pipeline] {Path(caminho).name}: acumulado {total} registros")
     with sqlite3.connect(DB_PATH) as conn:
         construir_agregados(conn)
+        registrar_meta(conn, "construido_em", datetime.now().isoformat(timespec="seconds"))
     print(f"[pipeline] {len(caminhos)} arquivo(s) processado(s), {total} registros no banco (+ agregados)")
     return total
 

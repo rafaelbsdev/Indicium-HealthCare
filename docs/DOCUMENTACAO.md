@@ -277,6 +277,8 @@ de reprocessar depois.
 - `registrar(evento, **dados)`: grava a linha com timestamp UTC.
 - Atalhos semânticos (`tool_chamada`, `tool_resultado`, `guardrail`,
   `decisao_llm`, `erro`) deixam o código de quem audita mais legível.
+- **Retenção**: ao passar de `AUDIT_MAX_BYTES`, o `audit.jsonl` é **rotacionado**
+  (renomeado com carimbo de data) e um novo arquivo começa — o log não cresce sem limite.
 
 ### `rag.py`
 O **RAG completo** (Retrieval-Augmented Generation) com banco vetorial.
@@ -422,6 +424,29 @@ disco. Separado em duas partes para permitir atualização parcial:
 - `main.py`: a CLI. `--construir-banco` roda o pipeline; `--agente "pergunta"` usa o
   agente ReAct; sem argumentos, sobe o servidor do relatório.
 - `make_diagram.py`: gera o `docs/arquitetura.pdf` (diagrama conceitual exigido).
+- `main.py` também aceita `--atualizar` (baixa os anos vivos e reconstrói o banco).
+
+### `atualizar_dados.py`
+Atualização automática do "banco vivo" (o enunciado pede visão em tempo real).
+
+- `resolver_url(resource_id)`: consulta a **API CKAN** do Open DATASUS
+  (`resource_show`) e devolve a URL atual do CSV daquele ano — o link direto muda a
+  cada semana, então resolvemos pelo id estável do recurso.
+- `baixar_arquivo(url, destino)`: baixa em `.part` e só então **renomeia** (download
+  atômico — nunca deixa um arquivo pela metade no lugar do bom).
+- `atualizar(...)`: para cada ano vivo (2025/2026, ver `RECURSOS_VIVOS`), remove o CSV
+  antigo daquele ano, baixa o novo e roda `executar_pipeline()` — que reconsolida
+  **todos** os anos presentes em `data/` e regrava os agregados e o metadado
+  `construido_em`. A rede fica isolada (parâmetros `resolver`/`baixar`), então os
+  testes rodam sem internet.
+- O relatório mostra um selo **"Base atualizada em …"** lido do metadado.
+
+**Como agendar** (fora do código, no SO):
+- Windows: Agendador de Tarefas → nova tarefa semanal executando
+  `python src/main.py --atualizar` na pasta do projeto.
+- Linux/macOS: uma entrada `cron` semanal com o mesmo comando.
+Os CSVs dos anos congelados (2019-2024) devem permanecer em `data/` para entrarem na
+reconsolidação.
 
 ---
 
@@ -449,9 +474,15 @@ critério "mecanismos de auditoria e registro de decisões dos agentes".
   descartada** — ela é mantida e recebe uma observação nomeando o valor suspeito e
   pedindo conferência. Descartar a análise inteira por causa de um número seria pior
   para o usuário do que mostrá-la com um alerta honesto.
+- `sanitizar_conteudo_externo(texto)`: **anti prompt-injection**. As manchetes são
+  conteúdo externo que entra no prompt/RAG; esta função as trata como **dado, não
+  instrução**: remove delimitadores (```` ``` ````, `<`, `>`) e neutraliza frases de
+  injeção ("ignore as instruções", "you are now", `system:` etc.), devolvendo o texto
+  limpo e um sinal `alterado`. O `report` aplica isso antes de montar o corpus e
+  **audita** quando neutraliza algo (`guardrail: prompt_injection`).
 - `validar_sem_dado_sensivel(texto)` / `sanitizar_saida(texto)`: **rede de segurança
   na saída** — varrem o texto **gerado pelo LLM** e mascaram qualquer coisa com
-  formato de CPF ou nome individual. Atenção: isso **não** é porque a entrada tenha
+  formato de **CPF, CNS, telefone, e-mail** ou nome individual. Atenção: isso **não** é porque a entrada tenha
   identificadores (ela já vem anonimizada — ver 4.3); é defesa em profundidade, para
   o caso de o modelo inventar um valor ou de uma fonte futura ser menos limpa. Por
   isso quase nunca dispara.
