@@ -367,7 +367,7 @@ manchetes são um dos corpora do RAG (o outro é o dicionário).
   que leva à notícia.
 
 > A **paginação** da seção de notícias é feita no navegador (ver `report._secao_noticias`):
-> as manchetes (até `MAX_NOTICIAS`) já vêm na página e o JS mostra 5 e vai
+> as manchetes (até `MAX_NOTICIAS`) já vêm na página e o JS as **pagina** (até 10 por
 > os botões Anterior/Próxima — sem novo acesso ao servidor nem recomputar o relatório.
 
 > **Requisito de rede:** a seção de notícias só é preenchida quando há **acesso à
@@ -450,9 +450,8 @@ disco. Separado em duas partes para permitir atualização parcial:
   texto ficar bem formatado na página em vez de mostrar a marcação crua.
 - `_secao_noticias(noticias, por_pagina=5)`: monta a seção de notícias **paginada**.
   Renderiza todas as (até 10) manchetes e injeta um JS que mostra 5 por página, com
-  um botão **"Próxima →"** que **carrega mais 5** por clique (acumulando). Quando não há
-  mais manchetes, o botão é **desabilitado** e aparece, em **vermelho** ao lado, a mensagem
-  "não foi possível carregar mais notícias".
+  página), com **← Anterior · n/m · Próxima →**. "Anterior" fica desabilitado na primeira
+  página e "Próxima" na última (o indicador `n/m` mostra a página atual e o total).
 - `_resolver_ref(min_d, max_d, data_ref)`: decide a **data de referência** a partir
   do intervalo (obtido por `metrics.intervalo_datas()`, consulta leve). Sem data,
   usa a máxima. Com uma data do date picker, valida contra `[min, max]`: fora (ou

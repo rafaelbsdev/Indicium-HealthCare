@@ -64,16 +64,16 @@ def test_secao_noticias_vazia():
     assert "Nenhuma notícia" in _secao_noticias([])
 
 
-def test_secao_noticias_carregar_mais():
+def test_secao_noticias_paginada_10_por_pagina():
     from report import _secao_noticias
     from tools.news_tool import Noticia
-    ns = [Noticia(f"n{i}", "F", f"2024-07-{i:02d}", f"http://x/{i}") for i in range(1, 13)]  # 12
-    h = _secao_noticias(ns, por_pagina=5)
-    assert h.count('class="nt-item"') == 12                  # todas renderizadas (ocultas)
-    assert "nt-prox" in h and "nt-fim" in h                  # botão + área da mensagem
-    assert "mostrarMais" in h                                # revela +5 por clique
-    assert "não foi possível carregar mais notícias" in h    # mensagem ao esgotar
-    assert "nt-ant" not in h and "nt-nums" not in h and "nt-pos" not in h  # sem prev/números/indicador
+    ns = [Noticia(f"n{i}", "F", f"2024-07-{i:02d}", f"http://x/{i}") for i in range(1, 26)]  # 25
+    h = _secao_noticias(ns)                                   # padrão: 10 por página
+    assert h.count('class="nt-item"') == 25                   # todas renderizadas
+    assert "nt-ant" in h and "nt-prox" in h and "nt-pos" in h # Anterior + indicador + Próxima
+    assert "var POR=10" in h                                  # 10 por página
+    assert "pag+' / '+paginas" in h                           # indicador n/m
+    assert "pag<=1" in h and "pag>=paginas" in h              # guardas nas pontas
 
 
 def test_conteudo_mostra_selo_de_atualizacao(db_temporario, pastas_temporarias, monkeypatch):

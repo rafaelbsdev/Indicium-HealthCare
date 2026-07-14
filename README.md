@@ -198,10 +198,9 @@ os gráficos são gerados a partir dos dados de qualquer forma.
 
 **Notícias recentes:** só são preenchidas quando há **acesso à internet** (o feed
 do Google Notícias). Busca **até 10** manchetes, ordenadas da mais recente para a
-mais antiga. A seção começa com 5 e o botão **"Próxima →"** **carrega mais 5** por clique
-(acumulando) até esgotar; aí o botão é desabilitado e aparece, em **vermelho** ao lado, a
-mensagem "não foi possível carregar mais notícias". Sem internet, a seção informa que
-nenhuma notícia foi recuperada, sem quebrar o relatório.
+mais antiga, e a seção é **paginada** (até **10 por página**, com **← Anterior · n/m ·
+Próxima →**). Sem internet, a seção informa que nenhuma notícia foi recuperada, sem
+quebrar o relatório.
 
 ---
 

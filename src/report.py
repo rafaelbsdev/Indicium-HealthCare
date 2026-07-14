@@ -49,7 +49,6 @@ h2{color:var(--azul);border-bottom:2px solid #e3ebf3;padding-bottom:6px;margin-t
 .btn-pg.ativo{background:var(--azul);color:#fff;border-color:var(--azul)}
 .btn-pg:disabled{opacity:.4;cursor:default}
 .nt-pos{font-size:13px;color:#08519c;font-weight:600;padding:0 8px;min-width:44px;text-align:center}
-.nt-fim{color:#c0392b;font-size:13px;font-weight:600;margin-left:8px}
 .fontes{font-size:12px;color:#5a6b7b;margin-top:12px}
 .carregando{text-align:center;color:#08519c;padding:60px 0}
 .spin{width:46px;height:46px;border:5px solid #d9e6f2;border-top-color:#2c7fb8;border-radius:50%;
@@ -103,32 +102,31 @@ def _md_para_html(texto):
     return "\n".join(saida)
 
 
-def _secao_noticias(noticias, por_pagina=5):
+def _secao_noticias(noticias, por_pagina=10):
     if not noticias:
         return "Nenhuma notícia recente foi recuperada."
     lista = noticias_como_html(noticias)
     controles = (
         '<div class="paginacao">'
+        '<button id="nt-ant" class="btn-pg" type="button">← Anterior</button>'
+        '<span id="nt-pos" class="nt-pos"></span>'
         '<button id="nt-prox" class="btn-pg" type="button">Próxima →</button>'
-        '<span id="nt-fim" class="nt-fim"></span>'
         '</div>')
     js = (
         "<script>(function(){"
         f"var POR={por_pagina};"
         "var itens=[].slice.call(document.querySelectorAll('.nt-item'));"
-        "var total=itens.length, visiveis=0;"
-        "var prox=document.getElementById('nt-prox');"
-        "var fim=document.getElementById('nt-fim');"
-        "function mostrarMais(){"
-        "var ate=Math.min(total, visiveis+POR);"
-        "for(var i=visiveis;i<ate;i++){itens[i].style.display='';}"
-        "visiveis=ate;"
-        "if(visiveis>=total){prox.disabled=true;"
-        "fim.textContent='não foi possível carregar mais notícias';}"
+        "var total=itens.length, paginas=Math.max(1, Math.ceil(total/POR)), pag=1;"
+        "var ant=document.getElementById('nt-ant'), prox=document.getElementById('nt-prox');"
+        "var pos=document.getElementById('nt-pos');"
+        "function render(){"
+        "itens.forEach(function(el,i){el.style.display=(i>=(pag-1)*POR&&i<pag*POR)?'':'none';});"
+        "ant.disabled=(pag<=1); prox.disabled=(pag>=paginas);"
+        "pos.textContent=pag+' / '+paginas;"
         "}"
-        "itens.forEach(function(el){el.style.display='none';});"
-        "mostrarMais();"
-        "prox.onclick=function(){if(visiveis<total){mostrarMais();}};"
+        "ant.onclick=function(){if(pag>1){pag--;render();}};"
+        "prox.onclick=function(){if(pag<paginas){pag++;render();}};"
+        "render();"
         "})();</script>")
     return lista + controles + js
 
