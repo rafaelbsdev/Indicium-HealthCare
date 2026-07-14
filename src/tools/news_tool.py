@@ -1,3 +1,4 @@
+import re
 import urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -46,8 +47,37 @@ def _parse_rss(xml_bruto, max_itens=5):
     return noticias
 
 
-def buscar_noticias(consulta="SRAG síndrome respiratória aguda grave", max_itens=10, timeout=10):
-    return _parse_rss(_baixar_rss(montar_url(consulta), timeout=timeout), max_itens=max_itens)
+CONSULTAS = ["SRAG síndrome respiratória aguda grave",
+             "InfoGripe Fiocruz síndrome respiratória",
+             "surto vírus respiratório Brasil"]
+
+
+def _normalizar_titulo(titulo):
+    return re.sub(r"\s+", " ", titulo.lower()).strip()
+
+
+def deduplicar(noticias):
+    vistos, saida = set(), []
+    for n in noticias:
+        chave = _normalizar_titulo(n.titulo) or n.link
+        if chave and chave not in vistos:
+            vistos.add(chave)
+            saida.append(n)
+    return saida
+
+
+def buscar_noticias(consultas=None, max_itens=10, timeout=10):
+    if consultas is None:
+        consultas = CONSULTAS
+    if isinstance(consultas, str):
+        consultas = [consultas]
+    todas = []
+    for consulta in consultas:
+        try:
+            todas.extend(_parse_rss(_baixar_rss(montar_url(consulta), timeout=timeout), max_itens=max_itens))
+        except Exception:
+            continue
+    return ordenar_por_data(deduplicar(todas))[:max_itens]
 
 
 def noticias_como_texto(noticias):

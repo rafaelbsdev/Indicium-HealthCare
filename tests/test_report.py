@@ -96,3 +96,13 @@ def test_conteudo_modo_agente_usa_o_agente(db_temporario, pastas_temporarias, mo
     monkeypatch.setattr(report, "comentar_metricas_via_agente", lambda res, aud=None: "ANALISE VIA AGENTE")
     frag = report.construir_conteudo(modo="agente")
     assert "ANALISE VIA AGENTE" in frag
+
+
+def test_conteudo_mostra_fontes_consultadas(db_temporario, pastas_temporarias, monkeypatch):
+    from tools.news_tool import Noticia
+    monkeypatch.setattr(report, "buscar_noticias",
+                        lambda *a, **k: [Noticia("Casos de SRAG caem", "G1", "2024-07-10", "http://g1.com/x")])
+    monkeypatch.setattr(rag, "criar_embedder_padrao", lambda: None)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    frag = report.construir_conteudo()
+    assert "Fontes consultadas" in frag and "g1.com/x" in frag

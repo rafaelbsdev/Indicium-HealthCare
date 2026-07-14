@@ -8,7 +8,7 @@ from audit import Auditor
 from agent import comentar_metricas, comentar_metricas_via_agente
 from tools.news_tool import (buscar_noticias, noticias_como_texto,
                              noticias_como_html, ordenar_por_data)
-from knowledge import DICIONARIO_CAMPOS
+from knowledge import DICIONARIO_CAMPOS, FONTES_OFICIAIS
 
 CONSULTA_RAG = "mortalidade UTI vacinação aumento de casos SRAG cenário atual"
 
@@ -49,6 +49,7 @@ h2{color:var(--azul);border-bottom:2px solid #e3ebf3;padding-bottom:6px;margin-t
 .btn-pg.ativo{background:var(--azul);color:#fff;border-color:var(--azul)}
 .btn-pg:disabled{opacity:.4;cursor:default}
 .nt-pos{font-size:13px;color:#08519c;font-weight:600;padding:0 8px;min-width:44px;text-align:center}
+.fontes{font-size:12px;color:#5a6b7b;margin-top:12px}
 .carregando{text-align:center;color:#08519c;padding:60px 0}
 .spin{width:46px;height:46px;border:5px solid #d9e6f2;border-top-color:#2c7fb8;border-radius:50%;
   margin:0 auto 14px;animation:g 1s linear infinite}
@@ -127,6 +128,18 @@ def _secao_noticias(noticias, por_pagina=5):
     return lista + controles + js
 
 
+def _fontes_consultadas(noticias):
+    vistos, itens = set(), []
+    for n in noticias:
+        if n.fonte in vistos:
+            continue
+        vistos.add(n.fonte)
+        itens.append(f'<a href="{n.link}" target="_blank" rel="noopener noreferrer">{n.fonte}</a>')
+    if not itens:
+        return ""
+    return '<p class="fontes">Fontes consultadas: ' + ", ".join(itens) + "</p>"
+
+
 def _resolver_ref(min_d, max_d, data_ref):
     if not data_ref:
         return max_d, ""
@@ -164,7 +177,7 @@ def construir_conteudo(data_ref=None, modo="deterministico"):
         neutralizados += 1 if limpo.alterado else 0
     if neutralizados:
         aud.guardrail("prompt_injection", False, f"{neutralizados} manchete(s) neutralizada(s) antes do LLM")
-    corpus = externos + DICIONARIO_CAMPOS
+    corpus = externos + DICIONARIO_CAMPOS + FONTES_OFICIAIS
     contexto = rag.montar_contexto(corpus, CONSULTA_RAG, k=4)
     aud.tool_resultado("rag_contexto", f"{len(corpus)} documentos indexados")
 
@@ -194,7 +207,7 @@ Data de referência dos dados: {ref.date()} · Casos (últimos 12 meses): {res.t
 <div class="grafico"><img src="{_img(graficos['geografico'])}" alt="Casos por estado"></div>
 
 <h2>Análise do cenário</h2>
-<div class="bloco">{comentario}</div>
+<div class="bloco">{comentario}{_fontes_consultadas(noticias)}</div>
 
 <h2>Notícias recentes (contexto)</h2>
 <div class="bloco">{ntxt}</div>"""

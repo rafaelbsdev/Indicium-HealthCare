@@ -49,7 +49,7 @@ def comentar_metricas(resultado, noticias_texto, auditor=None):
               f"NOTÍCIAS:\n{noticias_texto}\n\n"
               f"Interprete o cenário em 2-3 parágrafos. Use os VALORES EXATOS das "
               f"métricas acima (com as casas decimais), sem arredondar e sem "
-              f"introduzir outros percentuais.")
+              f"introduzir outros percentuais. Quando mencionar uma notícia, cite a fonte.")
     auditor.decisao_llm("Chamando LLM para comentar métricas.")
     try:
         texto = _invocar_llm(SYSTEM_PROMPT, prompt)

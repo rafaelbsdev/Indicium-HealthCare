@@ -10,3 +10,13 @@ DICIONARIO_CAMPOS = [
     "HOSPITAL: houve internação hospitalar. 1 = sim, 2 = não, 9 = ignorado.",
     "SG_UF_NOT: unidade federativa (estado) de notificação do caso.",
 ]
+
+
+FONTES_OFICIAIS = [
+    "InfoGripe (Fiocruz): boletim semanal que monitora a tendência de casos de SRAG "
+    "por região e faixa etária, sinalizando alta, queda ou estabilidade.",
+    "Boletins epidemiológicos do Ministério da Saúde: acompanham covid-19, influenza "
+    "e outros vírus respiratórios de importância em saúde pública, com dados de SRAG.",
+    "SIVEP-Gripe: sistema oficial de notificação de casos e óbitos por SRAG no Brasil, "
+    "base dos dados deste relatório.",
+]

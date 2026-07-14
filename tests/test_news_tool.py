@@ -70,3 +70,15 @@ def test_buscar_noticias_ate_10(monkeypatch):
     rss = f'<?xml version="1.0"?><rss><channel>{itens}</channel></rss>'
     monkeypatch.setattr(news_tool, "_baixar_rss", lambda url, timeout=10: rss)
     assert len(news_tool.buscar_noticias("x")) == 10   # no máximo 10
+
+
+def test_deduplica_titulos_repetidos():
+    ns = [news_tool.Noticia("Casos sobem", "G1", "2024-07-10", "x"),
+          news_tool.Noticia("casos  sobem", "Folha", "2024-07-09", "y")]
+    assert len(news_tool.deduplicar(ns)) == 1
+
+
+def test_buscar_multiplas_fontes_deduplica(monkeypatch):
+    monkeypatch.setattr(news_tool, "_baixar_rss", lambda url, timeout=10: RSS)
+    ns = news_tool.buscar_noticias()          # 3 consultas, mesmo RSS(2) -> dedup para 2
+    assert len(ns) == 2

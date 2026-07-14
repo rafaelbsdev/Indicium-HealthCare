@@ -308,6 +308,9 @@ produção usa-se `EmbedderLocal` + `IndiceChroma`.
 (EVOLUCAO, UTI, VACINA, CLASSI_FIN, etc.), extraídas do dicionário oficial. Este
 é o corpus do dicionário que o RAG indexa junto com as notícias, permitindo ao
 agente explicar o significado técnico dos campos.
+`FONTES_OFICIAIS` acrescenta ao corpus descrições de fontes oficiais (InfoGripe,
+boletins do Ministério da Saúde, SIVEP-Gripe), para o RAG ancorar a análise em
+referências confiáveis além das manchetes.
 
 ### `tools/news_tool.py`
 Notícias de SRAG em tempo real via RSS do Google Notícias (sem chave de API). As
@@ -321,7 +324,11 @@ manchetes são um dos corpora do RAG (o outro é o dicionário).
   "falsy" no ElementTree e o `or` daria o resultado errado (bug pego por teste);
   e o **sufixo "- Fonte"** que o Google Notícias coloca no fim do título é
   removido, para não duplicar o nome da fonte (que já vira hyperlink na página).
-- `buscar_noticias(...)`: junta rede + parsing; busca **até 10** manchetes.
+- `buscar_noticias(...)`: consulta **múltiplas fontes** (várias buscas em
+  `CONSULTAS`: SRAG, InfoGripe/Fiocruz, surtos), junta os resultados e aplica
+  `deduplicar` (mesmo título vindo de feeds diferentes vira um só); ordena por data e
+  corta em **10**. Uma fonte que falhar não derruba as demais.
+- `deduplicar(noticias)`: remove manchetes repetidas por título normalizado.
 - `ordenar_por_data(noticias)`: ordena da mais **recente** para a mais antiga
   (datas inválidas/desconhecidas vão para o fim).
 - `noticias_como_texto(...)`: formato **texto** (usado no prompt do LLM e no corpus
@@ -421,6 +428,9 @@ disco. Separado em duas partes para permitir atualização parcial:
   usa a máxima. Com uma data do date picker, valida contra `[min, max]`: fora (ou
   inválida) → **aviso** e cai para o período mais recente; dentro → usa a escolhida.
   Em seguida `construir_conteudo` carrega **só a janela** `desde = ref − 13 meses`.
+- `_fontes_consultadas(noticias)`: monta o rodapé **"Fontes consultadas"** com as
+  fontes distintas (com link) que embasaram o contexto — é o **grounding** visível da
+  análise, independente do que o LLM escreva.
 - `construir_conteudo(data_ref=None)`: monta só o **miolo** do relatório — resolve
   a data, calcula as 4 métricas, gera os 5 gráficos (em memória), busca notícias,
   monta o contexto RAG, pede a análise ao LLM e devolve o **fragmento** HTML (sem

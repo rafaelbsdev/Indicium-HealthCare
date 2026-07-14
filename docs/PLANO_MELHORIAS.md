@@ -36,7 +36,7 @@ dependências, testes e riscos de cada uma. Serve como roteiro de implementaçã
 | 4 | Guardrail anti prompt-injection (notícias) ✅ | 2 Segurança | S | baixo | — |
 | 5 | Mascaramento ampliado + retenção de auditoria ✅ | 2 Segurança | S | baixo | — |
 | 6 | Modo agente unificado na página ✅ | 3 Agente | M | médio | — |
-| 7 | RAG mais forte (fontes + grounding) | 3 Agente | M | médio | 4 |
+| 7 | RAG mais forte (fontes + grounding) ✅ | 3 Agente | M | médio | 4 |
 | 8 | Avaliação automatizada (tracing/regressão/backtest) | 3 Agente | M | baixo | 6,7 |
 | 9 | Métrica de UTI real (CNES) + IC/suavização | 4 Métricas/UX | L | médio | 1 |
 | 10 | Gráficos interativos + mapa + filtros | 4 Métricas/UX | L | médio | 1 |
@@ -157,7 +157,7 @@ qualidade/CI (11), que trava tudo o que foi feito.
 - **Critério**: Arquitetura, Uso de Tools. **DoD**: os dois modos funcionam e são
   testados; página idêntica em estrutura nos dois.
 
-### 7. RAG mais forte (fontes + grounding)
+### 7. RAG mais forte (fontes + grounding)  ✅ CONCLUÍDO
 - **O que muda**: além do dicionário + Google Notícias, indexar **boletins
   epidemiológicos oficiais** e **múltiplas fontes de notícias** com deduplicação; a
   análise passa a **citar a fonte** do trecho usado (grounding).
