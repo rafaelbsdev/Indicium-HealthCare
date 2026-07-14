@@ -5,7 +5,7 @@ import charts
 from config import (DB_PATH, AGG_DIARIO, AGG_FAIXA, AGG_UF, AGG_VIRUS, JANELA_CURTA_DIAS,
                     JANELA_LONGA_MESES, DATA_REFERENCIA, CLASSI_FIN_NOMES,
                     FAIXAS_ETARIAS_ROTULOS, TOP_UF)
-from metrics import Metrica, ResultadoMetricas
+from metrics import Metrica, ResultadoMetricas, com_intervalo
 
 
 def _carregar(tabela):
@@ -79,6 +79,8 @@ def calcular_metricas(ref=None, janela_longa_meses=JANELA_LONGA_MESES, janela_di
         "ocupacao_uti": _uti(jan),
         "vacinacao": _vacinacao(jan, total),
     }
+    for chave in ("mortalidade", "ocupacao_uti", "vacinacao"):
+        com_intervalo(res.metricas[chave])
     return res
 
 

@@ -12,7 +12,17 @@ def _get_api_key():
     return os.environ.get("ANTHROPIC_API_KEY")
 
 
+def configurar_tracing():
+    chave = os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY")
+    if chave:
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ.setdefault("LANGCHAIN_PROJECT", "srag-agent")
+        return True
+    return False
+
+
 def construir_llm(temperatura=0.2):
+    configurar_tracing()
     from langchain_anthropic import ChatAnthropic
     return ChatAnthropic(model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5"),
                          temperature=temperatura, timeout=60)

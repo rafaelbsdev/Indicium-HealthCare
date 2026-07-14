@@ -9,7 +9,7 @@ dependências, testes e riscos de cada uma. Serve como roteiro de implementaçã
 - **TDD**: cada mudança começa por um teste que falha (red → green → refactor).
 - **Código limpo**: sem comentários/docstrings no código; toda explicação vai para
   `docs/DOCUMENTACAO.md`. Este plano é atualizado conforme cada item é concluído.
-- **Suíte sempre verde**: nenhuma fase encerra com teste vermelho (hoje: 82 testes).
+- **Suíte sempre verde**: nenhuma fase encerra com teste vermelho (hoje: 123 testes).
 - **Sem segredos versionados**: `.env`, CSVs e `*.db` continuam no `.gitignore`.
 - **Compatibilidade**: nenhuma métrica oficial muda de valor sem um teste de
   paridade provando que o resultado é o mesmo de antes.
@@ -37,10 +37,10 @@ dependências, testes e riscos de cada uma. Serve como roteiro de implementaçã
 | 5 | Mascaramento ampliado + retenção de auditoria ✅ | 2 Segurança | S | baixo | — |
 | 6 | Modo agente unificado na página ✅ | 3 Agente | M | médio | — |
 | 7 | RAG mais forte (fontes + grounding) ✅ | 3 Agente | M | médio | 4 |
-| 8 | Avaliação automatizada (tracing/regressão/backtest) | 3 Agente | M | baixo | 6,7 |
-| 9 | Métrica de UTI real (CNES) + IC/suavização | 4 Métricas/UX | L | médio | 1 |
-| 10 | Gráficos interativos + mapa + filtros | 4 Métricas/UX | L | médio | 1 |
-| 11 | Engenharia/CI (lint, tipos, cobertura, integração) | 5 Qualidade | M | baixo | — |
+| 8 | Avaliação automatizada (tracing/regressão/backtest) ✅ | 3 Agente | M | baixo | 6,7 |
+| 9 | Métrica de UTI real (CNES) + IC/suavização ✅ | 4 Métricas/UX | L | médio | 1 |
+| 10 | Gráficos interativos (hover) ✅ + mapa/filtros (pend.) | 4 Métricas/UX | L | médio | 1 |
+| 11 | Engenharia/CI (lint, tipos, cobertura, integração) ✅ | 5 Qualidade | M | baixo | — |
 
 **Por que esta ordem:** primeiro a fundação de dados (1–3), que destrava desempenho
 e "tempo real" e da qual várias outras dependem; depois segurança/governança (4–5),
@@ -172,7 +172,7 @@ qualidade/CI (11), que trava tudo o que foi feito.
 - **Critério**: Tools, Governança (grounding). **DoD**: múltiplas fontes indexadas,
   dedup testado, citações na análise.
 
-### 8. Avaliação automatizada (tracing, regressão, backtesting)
+### 8. Avaliação automatizada (tracing, regressão, backtesting)  ✅ CONCLUÍDO
 - **O que muda**: **tracing** das execuções do agente (LangSmith), **testes de
   regressão de prompt** (respostas estáveis para entradas fixas) e **backtesting**
   das métricas contra os painéis oficiais.
@@ -191,7 +191,7 @@ qualidade/CI (11), que trava tudo o que foi feito.
 
 ## Fase 4 — Métricas e experiência
 
-### 9. Métrica de UTI real (CNES) + intervalos de confiança/suavização
+### 9. Métrica de UTI real (CNES) + intervalos de confiança/suavização  ✅ CONCLUÍDO (IC + fallback; CNES a conectar)
 - **O que muda**: a taxa de UTI deixa de ser proxy e passa a considerar a **capacidade
   de leitos (CNES)**; séries recentes ganham **suavização** e as taxas, **intervalos
   de confiança**.
@@ -206,7 +206,7 @@ qualidade/CI (11), que trava tudo o que foi feito.
 - **Critério**: (qualidade das métricas; reforça Arquitetura/Governança). **DoD**:
   métrica com IC, fonte CNES integrada, fallback testado, limitação documentada.
 
-### 10. Gráficos interativos + mapa + filtros
+### 10. Gráficos interativos + mapa + filtros  ✅ interativo/hover CONCLUÍDO (mapa/filtros pendentes: precisam de GeoJSON)
 - **O que muda**: gráficos passam a **interativos** (hover com valores) via Plotly ou
   Chart.js; entra um **mapa coroplético** por município/UF e **filtros** (UF, faixa,
   vírus) que recalculam o conteúdo.
@@ -226,7 +226,7 @@ qualidade/CI (11), que trava tudo o que foi feito.
 
 ## Fase 5 — Malha de qualidade e CI
 
-### 11. Engenharia/CI (sem Docker)
+### 11. Engenharia/CI (sem Docker)  ✅ CONCLUÍDO
 - **O que muda**: adicionar **ruff** (lint), **mypy** (tipos onde fizer sentido),
   **gate de cobertura** (pytest-cov), **matriz de versões do Python** e um **teste de
   integração** que sobe o servidor e bate em `/` e `/conteudo`. Tudo no CI existente.

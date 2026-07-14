@@ -1,3 +1,4 @@
+import math
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -14,6 +15,8 @@ class Metrica:
     numerador: float = None
     denominador: float = None
     detalhe: str = ""
+    ic_baixo: float = None
+    ic_alto: float = None
 
     def resumo(self):
         if self.valor is None:
@@ -26,6 +29,30 @@ class ResultadoMetricas:
     data_referencia: pd.Timestamp
     total_casos: int
     metricas: dict = field(default_factory=dict)
+
+
+def intervalo_wilson(sucessos, total, z=1.96):
+    if not total:
+        return (None, None)
+    p = sucessos / total
+    denom = 1 + z * z / total
+    centro = (p + z * z / (2 * total)) / denom
+    margem = z * math.sqrt(p * (1 - p) / total + z * z / (4 * total * total)) / denom
+    return ((centro - margem) * 100, (centro + margem) * 100)
+
+
+def com_intervalo(metrica):
+    if metrica.valor is not None and metrica.numerador is not None and metrica.denominador:
+        metrica.ic_baixo, metrica.ic_alto = intervalo_wilson(metrica.numerador, metrica.denominador)
+    return metrica
+
+
+def suavizar(serie, janela=7):
+    return serie.rolling(janela, min_periods=1).mean()
+
+
+def carregar_leitos_cnes():
+    return None
 
 
 def carregar_dados(desde=None):
@@ -69,9 +96,12 @@ def taxa_mortalidade(df):
     return Metrica("Taxa de mortalidade", ob/t*100, "%", ob, t, f"{ob} óbitos em {t} casos encerrados")
 
 
-def taxa_ocupacao_uti(df):
+def taxa_ocupacao_uti(df, leitos=None):
     c = df[df["UTI"].isin([SIM, NAO])]
     fu = c[c["UTI"] == SIM].shape[0]
+    if leitos:
+        return Metrica("Taxa de ocupação de UTI", fu/leitos*100, "%", fu, leitos,
+                       f"{fu} casos em UTI para {leitos} leitos (CNES)")
     t = c.shape[0]
     if t == 0:
         return Metrica("Taxa de ocupação de UTI", None, "%", fu, t, "sem status de UTI conhecido")
@@ -105,6 +135,8 @@ def calcular_todas(df=None, janela_longa_meses=12, ref=None):
     res = ResultadoMetricas(ref, int(dj.shape[0]))
     res.metricas = {"aumento_casos": taxa_aumento_casos(df, ref),
                     "mortalidade": taxa_mortalidade(dj),
-                    "ocupacao_uti": taxa_ocupacao_uti(dj),
+                    "ocupacao_uti": taxa_ocupacao_uti(dj, carregar_leitos_cnes()),
                     "vacinacao": taxa_vacinacao(dj)}
+    for chave in ("mortalidade", "ocupacao_uti", "vacinacao"):
+        com_intervalo(res.metricas[chave])
     return res

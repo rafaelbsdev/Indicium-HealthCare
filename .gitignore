@@ -17,3 +17,9 @@ __pycache__/
 .venv/
 venv/
 .ipynb_checkpoints/
+
+# Cobertura / lint / tipos
+.coverage
+.coverage.*
+.ruff_cache/
+.mypy_cache/

@@ -106,3 +106,20 @@ def test_conteudo_mostra_fontes_consultadas(db_temporario, pastas_temporarias, m
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     frag = report.construir_conteudo()
     assert "Fontes consultadas" in frag and "g1.com/x" in frag
+
+
+def test_cards_mostram_intervalo_de_confianca(db_temporario, pastas_temporarias, monkeypatch):
+    _indisponivel(monkeypatch)
+    assert "IC95%" in report.construir_conteudo()
+
+
+def test_conteudo_interativo_usa_canvas(db_temporario, pastas_temporarias, monkeypatch):
+    _indisponivel(monkeypatch)
+    frag = report.construir_conteudo(interativo=True)
+    assert "<canvas" in frag and "new Chart(" in frag
+    assert "data:image/png;base64," not in frag
+
+
+def test_pagina_carrega_chartjs_e_toggle(db_temporario):
+    p = report.construir_pagina()
+    assert "chart.umd" in p and "Gráficos interativos" in p

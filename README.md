@@ -217,7 +217,7 @@ pytest                      # roda toda a suíte
 pytest --cov=src            # com relatório de cobertura
 ```
 
-**82 testes**, cobrindo: cálculo das 4 métricas (com casos-limite), anonimização e tratamento
+**123 testes**, cobrindo: cálculo das 4 métricas (com casos-limite e backtesting), anonimização e tratamento
 do CSV sujo (datas impossíveis, códigos `.0`), guardrails, parsing de notícias,
 o **RAG** (chunking, índice vetorial, recuperação), geração de gráficos,
 auditoria, o agente (com LLM e rede mockados), o CLI, o gerador de diagrama e o
@@ -242,31 +242,71 @@ srag-agent/
 ├── .env.example
 ├── data/                     # CSV bruto do DATASUS + banco SQLite (não versionados)
 ├── docs/
-│   └── arquitetura.pdf       # diagrama conceitual da arquitetura
+│   ├── arquitetura.pdf       # diagrama conceitual da arquitetura
+│   ├── DOCUMENTACAO.md       # documentação técnica (módulo a módulo, decisões)
+│   └── PLANO_MELHORIAS.md    # plano/registro das melhorias
 ├── logs/
-│   └── audit.jsonl           # log de auditoria do agente
-├── tests/                    # suíte pytest (TDD) — 82 testes
+│   └── audit.jsonl           # log de auditoria (JSON Lines, rotacionado por tamanho)
+├── .github/workflows/
+│   └── tests.yml             # CI: pytest (matriz 3.10-3.12) + cobertura + ruff + mypy
+├── ruff.toml                 # configuração do lint
+├── tests/                    # suíte pytest (TDD) - 123 testes
 │   ├── conftest.py           # fixtures (dados sintéticos, banco/pastas temporárias)
-│   ├── test_metrics.py
-│   ├── test_data_pipeline.py
-│   ├── test_guardrails.py
-│   ├── test_news_tool.py
-│   ├── test_rag.py
-│   ├── test_charts.py
-│   ├── test_audit.py
-│   ├── test_agent.py
-│   ├── test_agent_tools.py
-│   ├── test_app.py
-│   ├── test_main.py
-│   ├── test_make_diagram.py
-│   └── test_report.py
+│   ├── test_metrics.py       # métricas + IC + UTI/CNES + suavização
+│   ├── test_backtest.py      # valores conferidos à mão (backtesting)
+│   ├── test_data_pipeline.py # limpeza, anonimização, multi-ano em blocos
+│   ├── test_agregados.py     # paridade agregado x linhas cruas
+│   ├── test_atualizar.py     # download do banco vivo + rebuild
+│   ├── test_guardrails.py    # escopo, anti-alucinação, anti-injeção, mascaramento
+│   ├── test_news_tool.py     # parsing RSS, múltiplas fontes, dedup
+│   ├── test_charts.py        # gráficos PNG
+│   ├── test_charts_web.py    # gráficos interativos (Chart.js)
+│   ├── test_rag.py           # chunking, índice vetorial, recuperação
+│   ├── test_audit.py         # auditoria + rotação
+│   ├── test_agent.py         # análise por LLM e modo agente
+│   ├── test_regressao.py     # regressão de prompt + tracing
+│   ├── test_agent_tools.py   # tools do agente
+│   ├── test_app.py           # cache/roteamento do servidor
+│   ├── test_integracao.py    # sobe o servidor e bate nas rotas
+│   ├── test_main.py          # CLI
+│   ├── test_make_diagram.py  # geração do diagrama
+│   └── test_report.py        # página + conteúdo
 └── src/
-    ├── config.py             # configuração central (caminhos, colunas, códigos)
-    ├── data_pipeline.py      # CSV sujo -> SQLite tratado
-    ├── metrics.py            # cálculo das 4 métricas (sem LLM)
-    ├── charts.py             # os 5 gráficos (2 exigidos + 3 de perfil)
-    ├── guardrails.py         # camadas de proteção
-    ├── audit.py              # registro de auditoria
+    ├── config.py             # configuração central (caminhos, colunas, códigos, agregados)
+    ├── data_pipeline.py      # CSV sujo -> SQLite tratado + tabelas agregadas
+    ├── agregados.py          # métricas e séries lidas das tabelas-resumo (rápido)
+    ├── metrics.py            # cálculo das 4 métricas + IC95% (oráculo dos testes)
+    ├── charts.py             # os 5 gráficos em PNG (matplotlib)
+    ├── charts_web.py         # versão interativa dos gráficos (Chart.js, hover)
+    ├── atualizar_dados.py    # download do banco vivo + rebuild (--atualizar)
+    ├── guardrails.py         # escopo, anti-alucinação, anti-injeção, mascaramento
+    ├── audit.py              # registro de auditoria (JSON Lines, com rotação)
     ├── rag.py                # RAG completo (chunking, embeddings, banco vetorial)
-    ├── knowledge.py          # dicionário de dados curado (corpus do RAG)
-    ├── agent.py              # agente orquestrador (LangGraph + Claude)
+    ├── knowledge.py          # dicionário + fontes oficiais (corpus do RAG)
+    ├── agent.py              # agente orquestrador (LangGraph + Claude) + modo agente
+    ├── report.py             # página + conteúdo (métricas, gráficos, análise)
+    ├── app.py                # servidor web local (rotas / e /conteudo)
+    ├── main.py               # CLI (--construir-banco, --agente, --atualizar)
+    └── make_diagram.py       # gera o diagrama de arquitetura (PDF)
+```
+
+---
+
+## 8. Melhorias implementadas
+
+Sobre a base da PoC foram feitas melhorias em TDD (detalhes em
+`docs/PLANO_MELHORIAS.md` e `docs/DOCUMENTACAO.md`):
+
+- **Desempenho:** pré-agregação na ingestão — qualquer data responde em ~1 s (a janela
+  do pico de 2020-21 caiu de ~3,7 GB / 19 s para ~124 MB / 1,5 s), com paridade de
+  métricas garantida por teste.
+- **Dados atuais:** consolidação multi-ano (2019-2026) e atualização automática do
+  banco vivo (`--atualizar`), com selo de "base atualizada em".
+- **Governança / segurança:** guardrail anti prompt-injection nas notícias;
+  mascaramento ampliado (CPF, CNS, telefone, e-mail); rotação do log de auditoria.
+- **Agente:** modo agente na página (o ReAct decide as tools) com os mesmos guardrails;
+  RAG com múltiplas fontes + deduplicação e rodapé "Fontes consultadas" (grounding).
+- **Métricas / UX:** intervalos de confiança (IC95%) nas proporções; gráficos
+  interativos com hover (Chart.js).
+- **Qualidade:** 123 testes (incl. regressão de prompt, backtesting e integração),
+  cobertura ~92%, e CI com matriz de Python + lint (ruff) + tipos (mypy).

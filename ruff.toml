@@ -1,0 +1,8 @@
+line-length = 120
+
+[lint]
+select = ["E", "F", "W"]
+# Estilo compacto adotado no projeto (documentado): imports e instruções curtas
+# na mesma linha; imports preguiçosos dentro de funções. As regras de código morto
+# (família F) continuam ativas.
+ignore = ["E401", "E402", "E501", "E702", "E741"]

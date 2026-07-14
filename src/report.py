@@ -2,12 +2,11 @@ import base64
 import re
 from datetime import datetime
 import pandas as pd
-import agregados, rag, guardrails
+import agregados, rag, guardrails, charts_web
 from data_pipeline import ler_meta
 from audit import Auditor
 from agent import comentar_metricas, comentar_metricas_via_agente
-from tools.news_tool import (buscar_noticias, noticias_como_texto,
-                             noticias_como_html, ordenar_por_data)
+from tools.news_tool import (buscar_noticias, noticias_como_html, ordenar_por_data)
 from knowledge import DICIONARIO_CAMPOS, FONTES_OFICIAIS
 
 CONSULTA_RAG = "mortalidade UTI vacinação aumento de casos SRAG cenário atual"
@@ -66,10 +65,13 @@ def _cards(res):
     blocos = []
     for m in res.metricas.values():
         valor = "—" if m.valor is None else f"{m.valor:.2f}{m.unidade}"
+        detalhe = m.detalhe
+        if getattr(m, "ic_baixo", None) is not None:
+            detalhe += f" · IC95% {m.ic_baixo:.1f}–{m.ic_alto:.1f}%"
         blocos.append(
             f'<div class="card"><div class="valor">{valor}</div>'
             f'<div class="nome">{m.nome}</div>'
-            f'<div class="detalhe">{m.detalhe}</div></div>')
+            f'<div class="detalhe">{detalhe}</div></div>')
     return "\n".join(blocos)
 
 
@@ -154,15 +156,19 @@ def _resolver_ref(min_d, max_d, data_ref):
     return d, ""
 
 
-def construir_conteudo(data_ref=None, modo="deterministico"):
+def construir_conteudo(data_ref=None, modo="deterministico", interativo=False):
     aud = Auditor()
     aud.registrar("inicio_html", data_ref=data_ref)
     min_d, max_d = agregados.intervalo_datas()
     ref, aviso = _resolver_ref(min_d, max_d, data_ref)
     res = agregados.calcular_metricas(ref=ref)
     aud.tool_resultado("consultar_metricas", f"{len(res.metricas)} métricas (ref={ref.date()})")
-    graficos = agregados.gerar_graficos(ref)
-    aud.tool_resultado("gerar_graficos", "5 gráficos em memória")
+    if interativo:
+        g = charts_web.blocos_interativos(agregados.series_graficos(ref))
+    else:
+        _png = agregados.gerar_graficos(ref)
+        g = {k: f'<div class="grafico"><img src="{_img(v)}" alt="{k}"></div>' for k, v in _png.items()}
+    aud.tool_resultado("gerar_graficos", "5 gráficos" + (" interativos" if interativo else " em memória"))
     try:
         noticias = ordenar_por_data(buscar_noticias())
     except Exception as e:
@@ -198,13 +204,13 @@ Data de referência dos dados: {ref.date()} · Casos (últimos 12 meses): {res.t
 <div class="cards">{_cards(res)}</div>
 
 <h2>Evolução dos casos</h2>
-<div class="grafico"><img src="{_img(graficos['diario'])}" alt="Casos diários"></div>
-<div class="grafico"><img src="{_img(graficos['mensal'])}" alt="Casos mensais"></div>
+{g['diario']}
+{g['mensal']}
 
 <h2>Perfil dos casos</h2>
-<div class="grafico"><img src="{_img(graficos['faixa_etaria'])}" alt="Casos e óbitos por faixa etária"></div>
-<div class="grafico"><img src="{_img(graficos['tipo_virus'])}" alt="Casos por classificação final"></div>
-<div class="grafico"><img src="{_img(graficos['geografico'])}" alt="Casos por estado"></div>
+{g['faixa_etaria']}
+{g['tipo_virus']}
+{g['geografico']}
 
 <h2>Análise do cenário</h2>
 <div class="bloco">{comentario}{_fontes_consultadas(noticias)}</div>
@@ -222,6 +228,7 @@ def construir_pagina():
 <html lang="pt-br"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Relatório de Vigilância — SRAG</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 {_CSS}
 </head><body>
 <header>
@@ -231,6 +238,7 @@ def construir_pagina():
     <div class="picker"><label>Data de referência:</label>
       <input id="dt" type="date" value="{latest}" min="{min_d.date()}" max="{max_d.date()}"></div>
     <label class="picker"><input type="checkbox" id="modo-agente"> Modo agente</label>
+    <label class="picker"><input type="checkbox" id="grafico-interativo"> Gráficos interativos</label>
     <a id="btn-atualizar" class="btn" href="#">↻ Atualizar dados</a>
   </div>
 </div>
@@ -243,7 +251,8 @@ function carregar(data, atualizar){{
   var alvo=document.getElementById("conteudo");
   alvo.innerHTML='<div class="carregando"><div class="spin"></div><p>Carregando o relatório…</p></div>';
   var modo=document.getElementById("modo-agente").checked?"agente":"deterministico";
-  var q="?data="+encodeURIComponent(data)+"&modo="+modo+(atualizar?"&atualizar=1":"");
+  var inter=document.getElementById("grafico-interativo").checked?"1":"0";
+  var q="?data="+encodeURIComponent(data)+"&modo="+modo+"&interativo="+inter+(atualizar?"&atualizar=1":"");
   fetch("/conteudo"+q).then(function(r){{return r.text();}}).then(function(h){{
     alvo.innerHTML=h;
     alvo.querySelectorAll("script").forEach(function(o){{
@@ -254,6 +263,7 @@ function carregar(data, atualizar){{
 var dt=document.getElementById("dt");
 dt.addEventListener("change", function(){{ carregar(dt.value, false); }});
 document.getElementById("modo-agente").addEventListener("change", function(){{ carregar(dt.value, false); }});
+document.getElementById("grafico-interativo").addEventListener("change", function(){{ carregar(dt.value, false); }});
 document.getElementById("btn-atualizar").addEventListener("click", function(e){{
   e.preventDefault(); carregar(dt.value, true);
 }});

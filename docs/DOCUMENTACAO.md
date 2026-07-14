@@ -217,8 +217,14 @@ texto explicando a conta** — isso é transparência para auditoria.
   a variação é indefinida (`valor = None`).
 - `taxa_mortalidade(df)`: óbitos ÷ casos com desfecho **conhecido**. Casos em
   aberto ficam fora do denominador para não distorcer.
-- `taxa_ocupacao_uti(df)`: casos que foram para UTI ÷ casos com status de UTI
-  conhecido. (Ver limitação 6.1.)
+- `taxa_ocupacao_uti(df, leitos=None)`: com `leitos` (capacidade CNES) calcula a
+  ocupação **real** (casos em UTI ÷ leitos); sem ela, cai no *proxy* (÷ casos com
+  status conhecido). `carregar_leitos_cnes()` é o ponto de integração — hoje devolve
+  `None` (a base CNES ainda não está conectada), então usa-se o proxy.
+- `intervalo_wilson(sucessos, total)` / `com_intervalo(metrica)`: **intervalo de
+  confiança de 95%** (Wilson) para as métricas de proporção (mortalidade, UTI,
+  vacinação); aparece nos cartões como `IC95% x–y%`. `suavizar(serie)` faz média
+  móvel para as séries recentes (disponível para uso).
 - `taxa_vacinacao(df)`: vacinados ÷ casos com status conhecido. Usa a coluna de
   vacina COVID quando há dado suficiente (≥ 1% da base); senão cai para a vacina
   da gripe. No arquivo de 2019, a coluna COVID é quase vazia (a vacina não
@@ -268,6 +274,18 @@ Além dos `grafico_*` (que recebem linhas cruas, usados nos testes), o módulo s
 **cálculo da série** (`_serie_*`) de **renderização** (`render_*`). Os `render_*` são
 compartilhados: tanto o caminho cru quanto o agregado (`agregados`) produzem a mesma
 série e chamam o mesmo render — por isso o gráfico é idêntico nos dois caminhos.
+
+### `charts_web.py`
+A versão **interativa** dos gráficos (Chart.js). `blocos_interativos(series)` recebe
+as mesmas séries agregadas e devolve, para cada gráfico, um `<canvas>` + um pequeno
+script que instancia o Chart.js — com **hover** mostrando os valores. A página carrega
+o Chart.js por CDN e tem um seletor **"Gráficos interativos"**; o modo **PNG**
+(matplotlib) segue como padrão (funciona sem internet e é o usado nos testes de
+imagem). Escolha por `construir_conteudo(interativo=True)` ou `/conteudo?interativo=1`.
+
+> Pendente do item 10: **mapa coroplético** por município/UF e **filtros cruzados**
+> (UF/faixa/vírus) dependem de um GeoJSON e de mais frontend; ficaram fora desta
+> entrega. A base agregada (`agg_uf` etc.) já suporta esses cortes quando forem feitos.
 
 ### `audit.py`
 Registro de auditoria em formato **JSON Lines** (um objeto JSON por linha) — fácil
@@ -354,8 +372,8 @@ As três ferramentas no formato LangChain (`@tool`).
 - A descrição de cada tool é passada em `description=` (não como docstring). Isso
   é **dado funcional**: é o texto que o agente usa para decidir quando chamar a
   ferramenta — por isso permanece no código, mesmo com o resto limpo.
-- `consultar_metricas()`: chama `metrics.calcular_todas()` e devolve o resumo.
-- `gerar_graficos()`: gera os dois gráficos e devolve os caminhos.
+- `consultar_metricas()`: chama `agregados.calcular_metricas()` e devolve o resumo.
+- `gerar_graficos()`: gera os gráficos a partir dos agregados e confirma a geração (resumo em texto para o agente).
 - `consultar_noticias()`: busca notícias; em caso de falha de rede, devolve uma
   mensagem amigável em vez de quebrar o agente.
 
@@ -364,7 +382,8 @@ O agente orquestrador (LangGraph + Claude).
 
 - `SYSTEM_PROMPT`: as regras de comportamento do agente (só citar números reais,
   usar notícias só como contexto, nunca citar dado individual). É dado funcional.
-- `construir_llm()`: cria o cliente do Claude (requer `ANTHROPIC_API_KEY`).
+- `configurar_tracing()`: liga o **tracing (LangSmith)** se houver `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` no ambiente; sem chave, fica desligado (opcional).
+- `construir_llm()`: cria o cliente do Claude (requer `ANTHROPIC_API_KEY`) e chama `configurar_tracing()`.
 - `construir_agente_react()`: monta o agente ReAct com as três tools.
 - `_invocar_llm(system, user)`: isola a chamada ao modelo (substituída por mock
   nos testes).
@@ -529,7 +548,7 @@ sobre o dado de entrada; a outra, sobre o texto gerado.
 ## 5. Estratégia de testes (TDD)
 
 O projeto foi escrito em **TDD** (red → green → refactor): cada comportamento nasceu
-de um teste que falhava antes de existir o código. São **82 testes** (`pytest`) e
+de um teste que falhava antes de existir o código. São **123 testes** (`pytest`) e
 rodam **sem rede, sem chave de API e sem bibliotecas pesadas** (`torch`/Chroma),
 graças à separação entre I/O e lógica pura e ao uso de mocks.
 
@@ -553,16 +572,37 @@ Cobertura, por área:
 Infra: `pytest.ini` aponta `pythonpath=src`; `conftest.py` provê fixtures de dados
 sintéticos, banco SQLite temporário e pasta de logs temporária.
 
+**Camada de avaliação** (item 8): além dos testes de unidade, há
+- **regressão de prompt** (`tests/test_regressao.py`): trava as regras críticas do
+  `SYSTEM_PROMPT` e do prompt de análise (anti-alucinação, notícias só como contexto,
+  citar fonte) e um *snapshot* estável da análise para uma entrada fixa;
+- **backtesting das métricas** (`tests/test_backtest.py`): um conjunto pequeno com
+  valores conferidos **à mão** garante que a lógica das 4 métricas não regrida;
+- **tracing opcional** via LangSmith (`configurar_tracing`), ligado só quando há chave.
+
+**Engenharia/CI** (item 11): `tests/test_integracao.py` sobe o servidor de verdade e
+bate em `/` e `/conteudo`. O CI (`.github/workflows/tests.yml`) roda em **matriz de
+Python (3.10–3.12)** com **gate de cobertura (85%; atual ~92%)**, além de **lint
+(ruff)** e **checagem de tipos (mypy, informativa)**. O `ruff.toml` mantém as regras
+de código morto (família F) e ignora só o estilo compacto adotado (imports e
+instruções curtas na mesma linha).
+
 ---
 
 ## 6. Limitações conhecidas
 
-- **Taxa de ocupação de UTI é um *proxy***: o dado é um sinalizador por caso (o
-  paciente foi ou não à UTI), não a ocupação real de leitos. Sem cruzar com a
-  capacidade de leitos (CNES), é uma aproximação — está documentado como tal.
-- **Taxa de vacinação**: a base escolhe automaticamente entre vacina COVID e gripe
-  conforme o preenchimento; a interpretação muda com essa escolha (indicada no
-  detalhe da métrica).
+- **Taxa de ocupação de UTI**: já existe o caminho para a ocupação **real** via
+  capacidade de leitos (CNES) — `taxa_ocupacao_uti(df, leitos=...)`. Enquanto a base
+  CNES não está conectada (`carregar_leitos_cnes()` devolve `None`), usa-se o *proxy*
+  (casos em UTI ÷ casos com status conhecido), agora acompanhado de **IC95%**.
+- **Taxa de vacinação — "população" vs. "casos"**: o enunciado pede a taxa de vacinação
+  *da população*, mas o dataset de SRAG só informa a situação vacinal **dos casos
+  notificados** — não há denominador populacional. Portanto a métrica entregue é a
+  **proporção de casos de SRAG que estavam vacinados**, não a cobertura vacinal da
+  população. Para esta última seria preciso cruzar com uma base externa de cobertura
+  vacinal (ex.: PNI/DATASUS). Além disso, a base escolhe automaticamente entre vacina
+  **COVID** e **gripe** conforme o preenchimento (a escolha é indicada no `detalhe` da
+  métrica), e a interpretação muda com ela.
 - **Qualidade do dado recente**: as semanas mais recentes sofrem *atraso de
   notificação* e subnotificação; o "banco vivo" é revisado retroativamente. Métricas
   das últimas semanas podem subir depois.
@@ -606,11 +646,16 @@ sintéticos, banco SQLite temporário e pasta de logs temporária.
   (o desafio pede "tempo real"); ingestão incremental por semana epidemiológica.
 - **Métrica de UTI real** cruzando com a capacidade de leitos (CNES) e intervalos de
   confiança/suavização nas séries.
-- **RAG mais forte**: boletins epidemiológicos oficiais + múltiplas fontes de
-  notícias com deduplicação, e avaliação de relevância.
-- **Observabilidade e avaliação**: tracing (LangSmith), testes de regressão de
-  prompt, *backtesting* das métricas contra os painéis oficiais do Ministério.
-- **Agente completo**: grafo LangGraph com planejamento e escolha de ferramentas,
-  com os mesmos guardrails, servindo a própria página.
-- **Entrega/DevOps**: Docker, CI no GitHub Actions rodando os testes com *gate* de
-  cobertura.
+- **RAG mais forte**: boletins epidemiológicos oficiais + múltiplas fontes de notícias
+  com deduplicação, e avaliação de relevância.
+- **Observabilidade e avaliação**: tracing (LangSmith), testes de regressão de prompt e
+  *backtesting* das métricas contra os painéis oficiais do Ministério.
+- **Agente completo**: grafo LangGraph com planejamento e escolha de ferramentas, com os
+  mesmos guardrails, servindo a própria página.
+- **Entrega/DevOps**: CI no GitHub Actions rodando os testes com *gate* de cobertura
+  (e, futuramente, empacotamento em contêiner).
+
+> Observação: vários destes itens já foram implementados numa rodada de melhorias
+> posterior (RAG multi-fonte + grounding, avaliação/tracing, modo agente na página, CI
+> com lint/tipos/cobertura). O acompanhamento item a item está em
+> `docs/PLANO_MELHORIAS.md`.

@@ -8,10 +8,10 @@ from report import construir_pagina, construir_conteudo
 _CACHE = {}
 
 
-def renderizar_conteudo(atualizar=False, data_ref=None, modo="deterministico"):
-    chave = (data_ref or "padrao", modo)
+def renderizar_conteudo(atualizar=False, data_ref=None, modo="deterministico", interativo=False):
+    chave = (data_ref or "padrao", modo, interativo)
     if atualizar or chave not in _CACHE:
-        _CACHE[chave] = construir_conteudo(data_ref=data_ref, modo=modo)
+        _CACHE[chave] = construir_conteudo(data_ref=data_ref, modo=modo, interativo=interativo)
     return _CACHE[chave]
 
 
@@ -32,8 +32,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             qs = parse_qs(partes.query)
             data_ref = qs.get("data", [None])[0] or None
             modo = qs.get("modo", ["deterministico"])[0] or "deterministico"
+            interativo = qs.get("interativo", ["0"])[0] in ("1", "true")
             atualizar = "atualizar" in qs
-            self._responder(renderizar_conteudo(atualizar=atualizar, data_ref=data_ref, modo=modo))
+            self._responder(renderizar_conteudo(atualizar=atualizar, data_ref=data_ref, modo=modo, interativo=interativo))
         else:
             self.send_error(404)
 

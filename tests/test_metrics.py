@@ -49,3 +49,23 @@ def test_calcular_todas_com_ref_explicita(df_limpo):
     ref = pd.Timestamp("2024-05-01")
     res = metrics.calcular_todas(df_limpo, ref=ref)
     assert res.data_referencia == ref
+
+
+def test_wilson_em_torno_da_metade():
+    lo, hi = metrics.intervalo_wilson(50, 100)
+    assert lo < 50 < hi and 39 < lo < 45 and 55 < hi < 61
+
+
+def test_mortalidade_tem_intervalo_de_confianca(df_limpo):
+    m = metrics.calcular_todas(df_limpo).metricas["mortalidade"]
+    assert m.ic_baixo is not None and m.ic_baixo < m.valor < m.ic_alto
+
+
+def test_uti_via_cnes_usa_leitos(df_limpo):
+    m = metrics.taxa_ocupacao_uti(df_limpo, leitos=10)
+    assert m.valor == pytest.approx(30.0) and "leitos" in m.detalhe.lower()
+
+
+def test_suavizar_media_movel():
+    import pandas as pd
+    assert list(metrics.suavizar(pd.Series([2, 4, 6]), janela=2)) == [2.0, 3.0, 5.0]
