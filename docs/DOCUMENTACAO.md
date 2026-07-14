@@ -104,6 +104,12 @@ A base agora cobre **2019 a 2026** (mais de 5 milhões de casos; os CSVs somam
   (`CHUNKSIZE`) e apenas com as ~17 colunas úteis (`usecols` em lista). Cada bloco
   é limpo, anonimizado e **acrescentado** ao SQLite; entre arquivos, o cache de
   disco é liberado. A memória fica constante, independente do tamanho do arquivo.
+- **Pré-agregação (leitura O(dias), não O(linhas))**: na ingestão, além de `srag`,
+  gravamos tabelas-resumo por dia (`agg_diario`, `agg_faixa`, `agg_uf`, `agg_virus`).
+  A página lê **só esses resumos** (poucos milhares de linhas), então qualquer data —
+  inclusive o pico de 2020-21 — responde em ~1 s com uso de memória baixo. Medição
+  real da janela de 2021: caiu de ~3,7 GB / 19 s (lendo linhas cruas) para **~124 MB
+  / 1,5 s**. A paridade com o cálculo cru é garantida por teste.
 - **Leitura por janela no relatório**: a página não carrega os 5,5 milhões de
   registros. Ela descobre o intervalo com `intervalo_datas()`, resolve a data de
   referência e então carrega via `carregar_dados(desde=ref − 13 meses)` — só o
@@ -181,6 +187,13 @@ Transforma o CSV bruto e sujo em um SQLite limpo.
   soltar o cache daquele CSV (`posix_fadvise`). Sem isso, o cache dos anos já lidos
   soma com o próximo arquivo grande e estoura a memória. Em Windows a função não
   existe e a chamada vira um no-op (protegida por `hasattr`).
+- `enriquecer(df)`: adiciona por linha as **bandeiras** que as métricas usam
+  (`EH_OBITO`, `EH_DESFECHO`, `UTI_SIM/CONHECIDO`, `VACCOV_*`, `VACGRIPE_*`) e a
+  `FAIXA` etária. Calculadas em pandas com os mesmos critérios das métricas — é o que
+  garante paridade quando somadas.
+- `construir_agregados(conn)`: ao fim da carga, cria as **tabelas-resumo**
+  (`agg_diario`, `agg_faixa`, `agg_uf`, `agg_virus`) com um `GROUP BY` sobre `srag`.
+  São minúsculas (milhares de linhas) e é delas que a página lê (ver 2.6).
 - `executar_pipeline(caminhos=None, substituir=True)`: orquestra tudo — para cada
   arquivo, lê em blocos, limpa, grava (primeiro substitui, depois acrescenta) e
   libera o cache. Sem argumentos, processa **todos** os CSVs da pasta.
@@ -235,6 +248,26 @@ Gera os gráficos do relatório (os 2 exigidos + 3 de perfil).
 - Detalhe técnico: os gráficos são renderizados **em memória** (`io.BytesIO`), sem
   tocar o disco, e usamos `matplotlib.use("Agg")` (backend sem tela) para rodar em
   servidor/CI. Os bytes são embutidos como base64 no HTML pelo `report.py`.
+
+### `agregados.py`
+A camada de leitura rápida do relatório. Em vez de ler milhões de linhas cruas a
+cada página, lê as **tabelas-resumo** (todas com poucos milhares de linhas) e:
+
+- `calcular_metricas(ref)`: reproduz as 4 métricas a partir de `agg_diario` (somando
+  as bandeiras na janela) — devolve o mesmo `ResultadoMetricas` de `metrics`.
+- `series_graficos(ref)` / `gerar_graficos(ref)`: montam as séries dos 5 gráficos a
+  partir dos resumos e chamam os `render_*` de `charts`.
+- `intervalo_datas()`: mínimo/máximo a partir de `agg_diario` (consulta leve).
+
+`metrics.py` continua existindo como **oráculo**: ele calcula sobre linhas cruas e é
+o que os testes de paridade (`tests/test_agregados.py`) usam para provar que o
+caminho agregado dá exatamente os mesmos números.
+
+### `charts.py`
+Além dos `grafico_*` (que recebem linhas cruas, usados nos testes), o módulo separa
+**cálculo da série** (`_serie_*`) de **renderização** (`render_*`). Os `render_*` são
+compartilhados: tanto o caminho cru quanto o agregado (`agregados`) produzem a mesma
+série e chamam o mesmo render — por isso o gráfico é idêntico nos dois caminhos.
 
 ### `audit.py`
 Registro de auditoria em formato **JSON Lines** (um objeto JSON por linha) — fácil
@@ -479,9 +512,10 @@ sintéticos, banco SQLite temporário e pasta de logs temporária.
 - **Qualidade do dado recente**: as semanas mais recentes sofrem *atraso de
   notificação* e subnotificação; o "banco vivo" é revisado retroativamente. Métricas
   das últimas semanas podem subir depois.
-- **Desempenho em janelas históricas pesadas**: para datas no pico de 2020-2021, a
-  janela de 12 meses tem ~2 milhões de linhas e o carregamento via `read_sql` fica
-  mais lento (segundos). O caso comum (data mais recente) é rápido.
+- **Desempenho em janelas históricas pesadas**: *resolvido* pela pré-agregação
+  (seção 2.6). A página lê tabelas-resumo em vez de linhas cruas, então qualquer data
+  responde em ~1 s. (Antes, a janela de 2020-21 lia ~2 milhões de linhas e ficava
+  lenta.)
 - **Notícias**: dependem de internet e de **uma** fonte (RSS do Google Notícias),
   usadas só como contexto — não entram no cálculo das métricas.
 - **Análise textual**: qualidade limitada pelo modelo/prompt e requer chave de API;

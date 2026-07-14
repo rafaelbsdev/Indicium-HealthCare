@@ -2,7 +2,7 @@ import base64
 import re
 from datetime import datetime
 import pandas as pd
-import metrics, charts, rag
+import agregados, rag
 from audit import Auditor
 from agent import comentar_metricas
 from tools.news_tool import (buscar_noticias, noticias_como_texto,
@@ -143,12 +143,11 @@ def _resolver_ref(min_d, max_d, data_ref):
 def construir_conteudo(data_ref=None):
     aud = Auditor()
     aud.registrar("inicio_html", data_ref=data_ref)
-    min_d, max_d = metrics.intervalo_datas()
+    min_d, max_d = agregados.intervalo_datas()
     ref, aviso = _resolver_ref(min_d, max_d, data_ref)
-    df = metrics.carregar_dados(desde=ref - pd.DateOffset(months=13))
-    res = metrics.calcular_todas(df, ref=ref)
+    res = agregados.calcular_metricas(ref=ref)
     aud.tool_resultado("consultar_metricas", f"{len(res.metricas)} métricas (ref={ref.date()})")
-    graficos = charts.gerar_todos(df, ref)
+    graficos = agregados.gerar_graficos(ref)
     aud.tool_resultado("gerar_graficos", "5 gráficos em memória")
     try:
         noticias = ordenar_por_data(buscar_noticias())
@@ -190,7 +189,7 @@ Data de referência dos dados: {ref.date()} · Casos (últimos 12 meses): {res.t
 
 
 def construir_pagina():
-    min_d, max_d = metrics.intervalo_datas()
+    min_d, max_d = agregados.intervalo_datas()
     latest = max_d.date().isoformat()
     return f"""<!doctype html>
 <html lang="pt-br"><head><meta charset="utf-8">

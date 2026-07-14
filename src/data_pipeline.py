@@ -3,7 +3,10 @@ import sqlite3
 from pathlib import Path
 import pandas as pd
 from config import (RAW_CSV_PATH, RAW_CSV_DIR, RAW_CSV_GLOB, CHUNKSIZE, DB_PATH, TABLE_NAME,
-                    COLUNAS_USADAS, COLUNAS_DATA, COLUNAS_SENSIVEIS_REMOVER, TP_IDADE_ANO)
+                    COLUNAS_USADAS, COLUNAS_DATA, COLUNAS_SENSIVEIS_REMOVER, TP_IDADE_ANO,
+                    EVOLUCAO_OBITOS, EVOLUCAO_DESFECHO_CONHECIDO, SIM, NAO,
+                    FAIXAS_ETARIAS_LIMITES, FAIXAS_ETARIAS_ROTULOS,
+                    AGG_DIARIO, AGG_FAIXA, AGG_UF, AGG_VIRUS)
 
 _COLS = set(COLUNAS_USADAS)
 
@@ -52,6 +55,27 @@ def derivar_idade(df):
     return df
 
 
+def _bandeira(df, coluna, conjunto):
+    if coluna in df.columns:
+        return df[coluna].isin(conjunto).astype("int64")
+    return pd.Series(0, index=df.index, dtype="int64")
+
+
+def enriquecer(df):
+    df["EH_OBITO"] = _bandeira(df, "EVOLUCAO", EVOLUCAO_OBITOS)
+    df["EH_DESFECHO"] = _bandeira(df, "EVOLUCAO", EVOLUCAO_DESFECHO_CONHECIDO)
+    df["UTI_SIM"] = _bandeira(df, "UTI", {SIM})
+    df["UTI_CONHECIDO"] = _bandeira(df, "UTI", {SIM, NAO})
+    df["VACCOV_SIM"] = _bandeira(df, "VACINA_COV", {SIM})
+    df["VACCOV_CONHECIDO"] = _bandeira(df, "VACINA_COV", {SIM, NAO})
+    df["VACGRIPE_SIM"] = _bandeira(df, "VACINA", {SIM})
+    df["VACGRIPE_CONHECIDO"] = _bandeira(df, "VACINA", {SIM, NAO})
+    idade = pd.to_numeric(df["IDADE_ANOS"], errors="coerce") if "IDADE_ANOS" in df.columns else pd.Series(index=df.index, dtype="float64")
+    faixa = pd.cut(idade, bins=FAIXAS_ETARIAS_LIMITES, labels=FAIXAS_ETARIAS_ROTULOS, right=False)
+    df["FAIXA"] = faixa.astype("object").where(faixa.notna(), None)
+    return df
+
+
 def limpar(df):
     for col in COLUNAS_DATA:
         if col in df.columns:
@@ -69,6 +93,7 @@ def limpar(df):
     df = derivar_idade(df)
     df = anonimizar(df)
     df["DATA_CASO"] = df["DT_SIN_PRI"].dt.normalize()
+    df = enriquecer(df)
     return df
 
 
@@ -89,6 +114,42 @@ def _liberar_cache_do_disco(caminho):
             pass
 
 
+def construir_agregados(conn):
+    cur = conn.cursor()
+    cur.executescript(f"""
+    DROP TABLE IF EXISTS {AGG_DIARIO};
+    CREATE TABLE {AGG_DIARIO} AS
+      SELECT DATA_CASO,
+             COUNT(*) casos,
+             SUM(EH_OBITO) obitos,
+             SUM(EH_DESFECHO) desfecho,
+             SUM(UTI_SIM) uti_sim,
+             SUM(UTI_CONHECIDO) uti_conhecido,
+             SUM(VACCOV_SIM) vaccov_sim,
+             SUM(VACCOV_CONHECIDO) vaccov_conhecido,
+             SUM(VACGRIPE_SIM) vacgripe_sim,
+             SUM(VACGRIPE_CONHECIDO) vacgripe_conhecido
+      FROM {TABLE_NAME} GROUP BY DATA_CASO;
+    DROP TABLE IF EXISTS {AGG_FAIXA};
+    CREATE TABLE {AGG_FAIXA} AS
+      SELECT DATA_CASO, FAIXA, COUNT(*) casos, SUM(EH_OBITO) obitos
+      FROM {TABLE_NAME} GROUP BY DATA_CASO, FAIXA;
+    DROP TABLE IF EXISTS {AGG_UF};
+    CREATE TABLE {AGG_UF} AS
+      SELECT DATA_CASO, SG_UF_NOT uf, COUNT(*) casos
+      FROM {TABLE_NAME} WHERE SG_UF_NOT IS NOT NULL GROUP BY DATA_CASO, SG_UF_NOT;
+    DROP TABLE IF EXISTS {AGG_VIRUS};
+    CREATE TABLE {AGG_VIRUS} AS
+      SELECT DATA_CASO, CLASSI_FIN classi, COUNT(*) casos
+      FROM {TABLE_NAME} GROUP BY DATA_CASO, CLASSI_FIN;
+    CREATE INDEX IF NOT EXISTS idx_agg_diario ON {AGG_DIARIO} (DATA_CASO);
+    CREATE INDEX IF NOT EXISTS idx_agg_faixa ON {AGG_FAIXA} (DATA_CASO);
+    CREATE INDEX IF NOT EXISTS idx_agg_uf ON {AGG_UF} (DATA_CASO);
+    CREATE INDEX IF NOT EXISTS idx_agg_virus ON {AGG_VIRUS} (DATA_CASO);
+    """)
+    conn.commit()
+
+
 def executar_pipeline(caminhos=None, substituir=True):
     caminhos = caminhos if caminhos is not None else listar_csvs()
     total = 0
@@ -103,7 +164,9 @@ def executar_pipeline(caminhos=None, substituir=True):
             total += len(limpo)
         _liberar_cache_do_disco(caminho)
         print(f"[pipeline] {Path(caminho).name}: acumulado {total} registros")
-    print(f"[pipeline] {len(caminhos)} arquivo(s) processado(s), {total} registros no banco")
+    with sqlite3.connect(DB_PATH) as conn:
+        construir_agregados(conn)
+    print(f"[pipeline] {len(caminhos)} arquivo(s) processado(s), {total} registros no banco (+ agregados)")
     return total
 
 

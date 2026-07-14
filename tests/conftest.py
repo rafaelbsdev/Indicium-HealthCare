@@ -30,12 +30,15 @@ def df_limpo():
 
 @pytest.fixture
 def db_temporario(tmp_path, df_limpo, monkeypatch):
-    import metrics, data_pipeline
+    import metrics, data_pipeline, agregados
     db = tmp_path / "t.db"
+    enriquecido = data_pipeline.enriquecer(df_limpo.copy())
     with sqlite3.connect(db) as c:
-        df_limpo.to_sql("srag", c, if_exists="replace", index=False)
+        enriquecido.to_sql("srag", c, if_exists="replace", index=False)
+        data_pipeline.construir_agregados(c)
     monkeypatch.setattr(metrics, "DB_PATH", db)
     monkeypatch.setattr(data_pipeline, "DB_PATH", db)
+    monkeypatch.setattr(agregados, "DB_PATH", db)
     return db
 
 

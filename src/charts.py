@@ -33,12 +33,42 @@ def _num_compacto(v):
     return str(v)
 
 
-def grafico_casos_diarios(df, ref, janela_dias=JANELA_CURTA_DIAS):
+def _serie_diaria(df, ref, janela_dias=JANELA_CURTA_DIAS):
     inicio = ref - pd.Timedelta(days=janela_dias)
     s = df[(df["DATA_CASO"] > inicio) & (df["DATA_CASO"] <= ref)].groupby("DATA_CASO").size()
-    s = s.reindex(pd.date_range(inicio + pd.Timedelta(days=1), ref, freq="D"), fill_value=0)
+    return s.reindex(pd.date_range(inicio + pd.Timedelta(days=1), ref, freq="D"), fill_value=0)
+
+
+def _serie_mensal(df, ref, janela_meses=JANELA_LONGA_MESES):
+    inicio = ref - pd.DateOffset(months=janela_meses)
+    r = df[(df["DATA_CASO"] > inicio) & (df["DATA_CASO"] <= ref)].copy()
+    r["MES"] = r["DATA_CASO"].dt.to_period("M")
+    return r.groupby("MES").size().reindex(
+        pd.period_range((inicio + pd.Timedelta(days=1)).to_period("M"), ref.to_period("M"), freq="M"), fill_value=0)
+
+
+def _serie_faixa(df, ref, janela_meses=JANELA_LONGA_MESES):
+    r = _janela(df, ref, janela_meses)
+    casos = _faixas(r.get("IDADE_ANOS")).value_counts().reindex(FAIXAS_ETARIAS_ROTULOS, fill_value=0)
+    ob_df = r[r["EVOLUCAO"].isin(EVOLUCAO_OBITOS)] if "EVOLUCAO" in r.columns else r.iloc[0:0]
+    obitos = _faixas(ob_df.get("IDADE_ANOS")).value_counts().reindex(FAIXAS_ETARIAS_ROTULOS, fill_value=0)
+    return casos, obitos
+
+
+def _serie_virus(df, ref, janela_meses=JANELA_LONGA_MESES):
+    r = _janela(df, ref, janela_meses)
+    serie = r["CLASSI_FIN"].map(CLASSI_FIN_NOMES).fillna("Não informado")
+    return serie.value_counts().sort_values()
+
+
+def _serie_uf(df, ref, janela_meses=JANELA_LONGA_MESES, top=TOP_UF):
+    r = _janela(df, ref, janela_meses)
+    return r["SG_UF_NOT"].dropna().value_counts().head(top).sort_values()
+
+
+def render_diario(serie, ref, janela_dias=JANELA_CURTA_DIAS):
     fig, ax = plt.subplots(figsize=(10, 4.5))
-    ax.bar(s.index, s.values, color="#2c7fb8")
+    ax.bar(serie.index, serie.values, color="#2c7fb8")
     ax.set_title(f"Casos diários de SRAG — últimos {janela_dias} dias (até {ref.date()})", fontweight="bold")
     ax.set_xlabel("Data"); ax.set_ylabel("Nº de casos")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m")); fig.autofmt_xdate(rotation=45)
@@ -46,16 +76,11 @@ def grafico_casos_diarios(df, ref, janela_dias=JANELA_CURTA_DIAS):
     return _fig_bytes(fig)
 
 
-def grafico_casos_mensais(df, ref, janela_meses=JANELA_LONGA_MESES):
-    inicio = ref - pd.DateOffset(months=janela_meses)
-    r = df[(df["DATA_CASO"] > inicio) & (df["DATA_CASO"] <= ref)].copy()
-    r["MES"] = r["DATA_CASO"].dt.to_period("M")
-    s = r.groupby("MES").size().reindex(
-        pd.period_range((inicio + pd.Timedelta(days=1)).to_period("M"), ref.to_period("M"), freq="M"), fill_value=0)
-    rot = [p.strftime("%m/%Y") for p in s.index]
+def render_mensal(serie, ref, janela_meses=JANELA_LONGA_MESES):
+    rot = [p.strftime("%m/%Y") for p in serie.index]
     fig, ax = plt.subplots(figsize=(10, 4.5))
-    ax.plot(rot, s.values, marker="o", color="#d95f0e", linewidth=2)
-    ax.fill_between(rot, s.values, alpha=0.15, color="#d95f0e")
+    ax.plot(rot, serie.values, marker="o", color="#d95f0e", linewidth=2)
+    ax.fill_between(rot, serie.values, alpha=0.15, color="#d95f0e")
     ax.set_title(f"Casos mensais de SRAG — últimos {janela_meses} meses (até {ref.date()})", fontweight="bold")
     ax.set_xlabel("Mês"); ax.set_ylabel("Nº de casos")
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
@@ -63,11 +88,7 @@ def grafico_casos_mensais(df, ref, janela_meses=JANELA_LONGA_MESES):
     return _fig_bytes(fig)
 
 
-def grafico_faixa_etaria(df, ref, janela_meses=JANELA_LONGA_MESES):
-    r = _janela(df, ref, janela_meses)
-    casos = _faixas(r.get("IDADE_ANOS")).value_counts().reindex(FAIXAS_ETARIAS_ROTULOS, fill_value=0)
-    obitos_df = r[r["EVOLUCAO"].isin(EVOLUCAO_OBITOS)] if "EVOLUCAO" in r.columns else r.iloc[0:0]
-    obitos = _faixas(obitos_df.get("IDADE_ANOS")).value_counts().reindex(FAIXAS_ETARIAS_ROTULOS, fill_value=0)
+def render_faixa(casos, obitos, ref, janela_meses=JANELA_LONGA_MESES):
     x = np.arange(len(FAIXAS_ETARIAS_ROTULOS)); larg = 0.42
     fig, ax = plt.subplots(figsize=(10, 4.8))
     b1 = ax.bar(x - larg/2, casos.values, larg, label="Casos", color="#2c7fb8")
@@ -83,10 +104,7 @@ def grafico_faixa_etaria(df, ref, janela_meses=JANELA_LONGA_MESES):
     return _fig_bytes(fig)
 
 
-def grafico_tipo_virus(df, ref, janela_meses=JANELA_LONGA_MESES):
-    r = _janela(df, ref, janela_meses)
-    serie = r["CLASSI_FIN"].map(CLASSI_FIN_NOMES).fillna("Não informado")
-    cont = serie.value_counts().sort_values()
+def render_virus(cont, ref, janela_meses=JANELA_LONGA_MESES):
     fig, ax = plt.subplots(figsize=(10, 4.5))
     ax.barh(cont.index.astype(str), cont.values, color="#4a8c3f")
     ax.set_title(f"Casos por classificação final — últimos {janela_meses} meses (até {ref.date()})", fontweight="bold")
@@ -97,9 +115,7 @@ def grafico_tipo_virus(df, ref, janela_meses=JANELA_LONGA_MESES):
     return _fig_bytes(fig)
 
 
-def grafico_geografico(df, ref, janela_meses=JANELA_LONGA_MESES, top=TOP_UF):
-    r = _janela(df, ref, janela_meses)
-    cont = r["SG_UF_NOT"].dropna().value_counts().head(top).sort_values()
+def render_geografico(cont, ref, janela_meses=JANELA_LONGA_MESES, top=TOP_UF):
     fig, ax = plt.subplots(figsize=(10, 4.5))
     ax.barh(cont.index.astype(str), cont.values, color="#6a51a3")
     ax.set_title(f"Casos por estado (top {top}) — últimos {janela_meses} meses (até {ref.date()})", fontweight="bold")
@@ -108,6 +124,27 @@ def grafico_geografico(df, ref, janela_meses=JANELA_LONGA_MESES, top=TOP_UF):
         ax.text(v, i, f" {int(v)}", va="center", fontsize=9)
     ax.grid(axis="x", linestyle="--", alpha=0.4); fig.tight_layout()
     return _fig_bytes(fig)
+
+
+def grafico_casos_diarios(df, ref, janela_dias=JANELA_CURTA_DIAS):
+    return render_diario(_serie_diaria(df, ref, janela_dias), ref, janela_dias)
+
+
+def grafico_casos_mensais(df, ref, janela_meses=JANELA_LONGA_MESES):
+    return render_mensal(_serie_mensal(df, ref, janela_meses), ref, janela_meses)
+
+
+def grafico_faixa_etaria(df, ref, janela_meses=JANELA_LONGA_MESES):
+    casos, obitos = _serie_faixa(df, ref, janela_meses)
+    return render_faixa(casos, obitos, ref, janela_meses)
+
+
+def grafico_tipo_virus(df, ref, janela_meses=JANELA_LONGA_MESES):
+    return render_virus(_serie_virus(df, ref, janela_meses), ref, janela_meses)
+
+
+def grafico_geografico(df, ref, janela_meses=JANELA_LONGA_MESES, top=TOP_UF):
+    return render_geografico(_serie_uf(df, ref, janela_meses, top), ref, janela_meses, top)
 
 
 def gerar_todos(df, ref):
