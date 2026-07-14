@@ -4,6 +4,7 @@ from datetime import datetime
 import pandas as pd
 import agregados, rag, guardrails, charts_web
 from data_pipeline import ler_meta
+from config import MAX_NOTICIAS
 from audit import Auditor
 from agent import comentar_metricas, comentar_metricas_via_agente
 from tools.news_tool import (buscar_noticias, noticias_como_html, ordenar_por_data)
@@ -48,6 +49,7 @@ h2{color:var(--azul);border-bottom:2px solid #e3ebf3;padding-bottom:6px;margin-t
 .btn-pg.ativo{background:var(--azul);color:#fff;border-color:var(--azul)}
 .btn-pg:disabled{opacity:.4;cursor:default}
 .nt-pos{font-size:13px;color:#08519c;font-weight:600;padding:0 8px;min-width:44px;text-align:center}
+.nt-fim{color:#c0392b;font-size:13px;font-weight:600;margin-left:8px}
 .fontes{font-size:12px;color:#5a6b7b;margin-top:12px}
 .carregando{text-align:center;color:#08519c;padding:60px 0}
 .spin{width:46px;height:46px;border:5px solid #d9e6f2;border-top-color:#2c7fb8;border-radius:50%;
@@ -107,25 +109,26 @@ def _secao_noticias(noticias, por_pagina=5):
     lista = noticias_como_html(noticias)
     controles = (
         '<div class="paginacao">'
-        '<button id="nt-ant" class="btn-pg" type="button">← Anterior</button>'
-        '<span id="nt-pos" class="nt-pos"></span>'
         '<button id="nt-prox" class="btn-pg" type="button">Próxima →</button>'
+        '<span id="nt-fim" class="nt-fim"></span>'
         '</div>')
     js = (
         "<script>(function(){"
         f"var POR={por_pagina};"
         "var itens=[].slice.call(document.querySelectorAll('.nt-item'));"
-        "var total=itens.length, paginas=Math.max(1, Math.ceil(total/POR)), pag=1;"
-        "var ant=document.getElementById('nt-ant'), prox=document.getElementById('nt-prox');"
-        "var pos=document.getElementById('nt-pos');"
-        "function render(){"
-        "itens.forEach(function(el,i){el.style.display=(i>=(pag-1)*POR&&i<pag*POR)?'':'none';});"
-        "ant.disabled=(pag<=1); prox.disabled=(pag>=paginas);"
-        "pos.textContent=pag+' / '+paginas;"
+        "var total=itens.length, visiveis=0;"
+        "var prox=document.getElementById('nt-prox');"
+        "var fim=document.getElementById('nt-fim');"
+        "function mostrarMais(){"
+        "var ate=Math.min(total, visiveis+POR);"
+        "for(var i=visiveis;i<ate;i++){itens[i].style.display='';}"
+        "visiveis=ate;"
+        "if(visiveis>=total){prox.disabled=true;"
+        "fim.textContent='não foi possível carregar mais notícias';}"
         "}"
-        "ant.onclick=function(){if(pag>1){pag--;render();}};"
-        "prox.onclick=function(){if(pag<paginas){pag++;render();}};"
-        "render();"
+        "itens.forEach(function(el){el.style.display='none';});"
+        "mostrarMais();"
+        "prox.onclick=function(){if(visiveis<total){mostrarMais();}};"
         "})();</script>")
     return lista + controles + js
 
@@ -169,12 +172,59 @@ def construir_conteudo(data_ref=None, modo="deterministico", interativo=False):
         _png = agregados.gerar_graficos(ref)
         g = {k: f'<div class="grafico"><img src="{_img(v)}" alt="{k}"></div>' for k, v in _png.items()}
     aud.tool_resultado("gerar_graficos", "5 gráficos" + (" interativos" if interativo else " em memória"))
+    aviso_html = f'<div class="aviso">⚠ {aviso}</div>' if aviso else ""
+    atualizado = ler_meta("construido_em")
+    selo = f" · Base atualizada em {atualizado.replace('T', ' ')}" if atualizado else ""
+
+    base = "?data=" + (data_ref or "") + "&modo=" + modo
+    lenta = (
+        '<h2>Análise do cenário</h2>'
+        '<div id="bloco-analise" class="bloco">'
+        '<div class="carregando"><div class="spin"></div><p>Gerando análise…</p></div></div>'
+        '<h2>Notícias recentes (contexto)</h2>'
+        '<div id="bloco-noticias" class="bloco">'
+        '<div class="carregando"><div class="spin"></div><p>Buscando notícias…</p></div></div>'
+        "<script>(function(){"
+        "var extra=window.__atualizarAnalise?'&atualizar=1':''; window.__atualizarAnalise=false;"
+        "function carrega(url,id){var el=document.getElementById(id);"
+        "fetch(url).then(function(r){return r.text();}).then(function(h){el.innerHTML=h;"
+        "el.querySelectorAll('script').forEach(function(o){"
+        "var s=document.createElement('script'); s.textContent=o.textContent; o.replaceWith(s);});"
+        "}).catch(function(e){el.innerHTML=\"<p style='color:#b00'>Falha ao carregar: \"+e+\"</p>\";});}"
+        "carrega('/analise" + base + "'+extra,'bloco-analise');"
+        "carrega('/noticias" + base + "'+extra,'bloco-noticias');"
+        "})();</script>")
+
+    aud.registrar("fim_html")
+    return f"""<div class="meta">Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')} ·
+Data de referência dos dados: {ref.date()} · Casos (últimos 12 meses): {res.total_casos}{selo}</div>
+{aviso_html}
+<h2>Métricas principais</h2>
+<div class="cards">{_cards(res)}</div>
+
+<h2>Evolução dos casos</h2>
+{g['diario']}
+{g['mensal']}
+
+<h2>Perfil dos casos</h2>
+{g['faixa_etaria']}
+{g['tipo_virus']}
+{g['geografico']}
+
+{lenta}"""
+
+
+def construir_analise(data_ref=None, modo="deterministico"):
+    aud = Auditor()
+    aud.registrar("inicio_analise", data_ref=data_ref)
+    min_d, max_d = agregados.intervalo_datas()
+    ref, _ = _resolver_ref(min_d, max_d, data_ref)
+    res = agregados.calcular_metricas(ref=ref)
     try:
-        noticias = ordenar_por_data(buscar_noticias())
+        noticias = ordenar_por_data(buscar_noticias(max_itens=MAX_NOTICIAS))
     except Exception as e:
         noticias = []
         aud.erro("buscar_noticias", str(e))
-    aud.tool_resultado("consultar_noticias", f"{len(noticias)} manchetes")
 
     externos, neutralizados = [], 0
     for n in noticias:
@@ -191,34 +241,19 @@ def construir_conteudo(data_ref=None, modo="deterministico", interativo=False):
         bruto = comentar_metricas_via_agente(res, aud)
     else:
         bruto = comentar_metricas(res, contexto, aud)
-    comentario = _md_para_html(bruto)
-    ntxt = _secao_noticias(noticias)
-    aviso_html = f'<div class="aviso">⚠ {aviso}</div>' if aviso else ""
+    aud.registrar("fim_analise")
+    return _md_para_html(bruto) + _fontes_consultadas(noticias)
 
-    atualizado = ler_meta("construido_em")
-    selo = f" · Base atualizada em {atualizado.replace('T', ' ')}" if atualizado else ""
-    frag = f"""<div class="meta">Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')} ·
-Data de referência dos dados: {ref.date()} · Casos (últimos 12 meses): {res.total_casos}{selo}</div>
-{aviso_html}
-<h2>Métricas principais</h2>
-<div class="cards">{_cards(res)}</div>
 
-<h2>Evolução dos casos</h2>
-{g['diario']}
-{g['mensal']}
-
-<h2>Perfil dos casos</h2>
-{g['faixa_etaria']}
-{g['tipo_virus']}
-{g['geografico']}
-
-<h2>Análise do cenário</h2>
-<div class="bloco">{comentario}{_fontes_consultadas(noticias)}</div>
-
-<h2>Notícias recentes (contexto)</h2>
-<div class="bloco">{ntxt}</div>"""
-    aud.registrar("fim_html")
-    return frag
+def construir_noticias(data_ref=None):
+    aud = Auditor()
+    try:
+        noticias = ordenar_por_data(buscar_noticias(max_itens=MAX_NOTICIAS))
+    except Exception as e:
+        noticias = []
+        aud.erro("buscar_noticias", str(e))
+    aud.tool_resultado("consultar_noticias", f"{len(noticias)} manchetes")
+    return _secao_noticias(noticias)
 
 
 def construir_pagina():
@@ -249,6 +284,7 @@ Notícias são fontes externas usadas como contexto.</footer>
 <script>
 function carregar(data, atualizar){{
   var alvo=document.getElementById("conteudo");
+  window.__atualizarAnalise=atualizar;
   alvo.innerHTML='<div class="carregando"><div class="spin"></div><p>Carregando o relatório…</p></div>';
   var modo=document.getElementById("modo-agente").checked?"agente":"deterministico";
   var inter=document.getElementById("grafico-interativo").checked?"1":"0";

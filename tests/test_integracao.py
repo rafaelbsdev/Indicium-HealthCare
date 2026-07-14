@@ -16,8 +16,13 @@ def test_servidor_responde_ponta_a_ponta(db_temporario, pastas_temporarias, monk
     try:
         pagina = urllib.request.urlopen(f"http://127.0.0.1:{porta}/", timeout=10).read().decode()
         conteudo = urllib.request.urlopen(f"http://127.0.0.1:{porta}/conteudo?data=", timeout=10).read().decode()
+        analise = urllib.request.urlopen(f"http://127.0.0.1:{porta}/analise?data=", timeout=10).read().decode()
+        noticias = urllib.request.urlopen(f"http://127.0.0.1:{porta}/noticias?data=", timeout=10).read().decode()
     finally:
         servidor.shutdown(); servidor.server_close()
 
     assert 'id="conteudo"' in pagina and 'type="date"' in pagina
     assert "Métricas principais" in conteudo and conteudo.count("data:image/png;base64,") == 5
+    assert 'id="bloco-analise"' in conteudo and 'id="bloco-noticias"' in conteudo   # carregam à parte
+    assert "indispon" in analise.lower()                  # /analise (sem chave) = aviso honesto
+    assert "Nenhuma notícia" in noticias                  # /noticias (sem rede no teste)

@@ -120,6 +120,16 @@ Sobre tokens: o LLM **nunca** recebe o arquivo nem linhas de paciente — recebe
 métricas já agregadas e as manchetes. A minimização de colunas na ingestão garante
 que nem a etapa de processamento carrega dado além do necessário.
 
+### 2.7 Carregamento assíncrono da parte lenta
+As notícias (rede) e a análise (LLM) são as etapas mais lentas. Por isso o conteúdo é
+dividido em **três rotas**: `/conteudo` devolve na hora as métricas e os gráficos (só
+agregados, ~0,5 s); e a parte lenta é carregada em **dois blocos independentes**, cada um
+com seu **spinner** — `/noticias` (busca RSS) e `/analise` (RAG + LLM, com o estado
+"Gerando análise…"). Assim a página aparece de imediato, as notícias entram assim que
+chegam e a análise preenche quando o LLM responde — sem travar uma na outra. O vínculo
+notícia→análise é mantido: a `/analise` também consulta as notícias para embasar o texto
+do LLM.
+
 ## 3. Módulo a módulo
 
 ### `config.py`
@@ -342,10 +352,11 @@ manchetes são um dos corpora do RAG (o outro é o dicionário).
   "falsy" no ElementTree e o `or` daria o resultado errado (bug pego por teste);
   e o **sufixo "- Fonte"** que o Google Notícias coloca no fim do título é
   removido, para não duplicar o nome da fonte (que já vira hyperlink na página).
-- `buscar_noticias(...)`: consulta **múltiplas fontes** (várias buscas em
-  `CONSULTAS`: SRAG, InfoGripe/Fiocruz, surtos), junta os resultados e aplica
-  `deduplicar` (mesmo título vindo de feeds diferentes vira um só); ordena por data e
-  corta em **10**. Uma fonte que falhar não derruba as demais.
+- `buscar_noticias(consultas=None, max_itens=10, ...)`: consulta **múltiplas fontes**
+  (várias buscas em `CONSULTAS`: SRAG, InfoGripe/Fiocruz, surtos), junta, aplica
+  `deduplicar` (mesmo título vindo de feeds diferentes vira um só), ordena por data e
+  corta em `max_itens`. O relatório busca um **pool maior** (`MAX_NOTICIAS`, ex.: 30) para
+  o botão "carregar mais" ter o que revelar. Uma fonte que falhar não derruba as demais.
 - `deduplicar(noticias)`: remove manchetes repetidas por título normalizado.
 - `ordenar_por_data(noticias)`: ordena da mais **recente** para a mais antiga
   (datas inválidas/desconhecidas vão para o fim).
@@ -356,7 +367,7 @@ manchetes são um dos corpora do RAG (o outro é o dicionário).
   que leva à notícia.
 
 > A **paginação** da seção de notícias é feita no navegador (ver `report._secao_noticias`):
-> as até 10 notícias já vêm na página e o JS mostra 5 por vez, com um indicador
+> as manchetes (até `MAX_NOTICIAS`) já vêm na página e o JS mostra 5 e vai
 > os botões Anterior/Próxima — sem novo acesso ao servidor nem recomputar o relatório.
 
 > **Requisito de rede:** a seção de notícias só é preenchida quando há **acesso à
@@ -439,9 +450,9 @@ disco. Separado em duas partes para permitir atualização parcial:
   texto ficar bem formatado na página em vez de mostrar a marcação crua.
 - `_secao_noticias(noticias, por_pagina=5)`: monta a seção de notícias **paginada**.
   Renderiza todas as (até 10) manchetes e injeta um JS que mostra 5 por página, com
-  um indicador **"página / total"** (ex.: `2 / 2`) e botões Anterior/Próxima — ao clicar
-  em Próxima, revela as próximas 5. Guardas: "Anterior" fica desabilitado na
-  página 1 (nunca vai a 0/−1) e "Próxima" na última (nunca passa do total).
+  um botão **"Próxima →"** que **carrega mais 5** por clique (acumulando). Quando não há
+  mais manchetes, o botão é **desabilitado** e aparece, em **vermelho** ao lado, a mensagem
+  "não foi possível carregar mais notícias".
 - `_resolver_ref(min_d, max_d, data_ref)`: decide a **data de referência** a partir
   do intervalo (obtido por `metrics.intervalo_datas()`, consulta leve). Sem data,
   usa a máxima. Com uma data do date picker, valida contra `[min, max]`: fora (ou
@@ -450,19 +461,27 @@ disco. Separado em duas partes para permitir atualização parcial:
 - `_fontes_consultadas(noticias)`: monta o rodapé **"Fontes consultadas"** com as
   fontes distintas (com link) que embasaram o contexto — é o **grounding** visível da
   análise, independente do que o LLM escreva.
-- `construir_conteudo(data_ref=None)`: monta só o **miolo** do relatório — resolve
-  a data, calcula as 4 métricas, gera os 5 gráficos (em memória), busca notícias,
-  monta o contexto RAG, pede a análise ao LLM e devolve o **fragmento** HTML (sem
-  `<html>`/`<head>`). Tudo é auditado (`inicio_html`/`fim_html`).
-- `construir_pagina()`: monta a **página persistente** — cabeçalho com o date
-  picker (padrão = data mais recente), a área `#conteudo` e o JS que busca o
-  fragmento em `/conteudo` e troca só o miolo, sem recarregar o cabeçalho.
+- `construir_conteudo(data_ref=None, modo, interativo)`: a **parte rápida** — resolve a
+  data, calcula as 4 métricas e gera os 5 gráficos (só agregados; **não** toca em notícias
+  nem LLM). Devolve métricas + gráficos + dois blocos com spinner (`#bloco-analise` e
+  `#bloco-noticias`) e um script que busca `/analise` e `/noticias` em paralelo. Medido:
+  ~0,5 s.
+- `construir_analise(data_ref=None, modo)`: só a **análise** — busca notícias (para o RAG),
+  sanitiza (anti-injeção), monta o contexto, pede ao LLM e devolve o texto + "Fontes
+  consultadas". Sem cabeçalho (é injetado em `#bloco-analise`).
+- `construir_noticias(data_ref=None)`: só a **seção de notícias** (o `_secao_noticias` com
+  o botão "carregar mais"). Injetado em `#bloco-noticias`.
+- `construir_pagina()`: monta a **página persistente** — cabeçalho com o date picker, a
+  área `#conteudo` e o JS que busca `/conteudo` e troca só o miolo. Ao trocar a data, o JS
+  seta `window.__atualizarAnalise` para o botão "Atualizar dados" forçar o refresh também
+  da parte lenta.
 
 ### `app.py` e `main.py`
-- `app.py`: servidor HTTP da biblioteca padrão (`http.server`). Rota `/` devolve a
-  **página persistente**; `/conteudo?data=…&atualizar=…` devolve o **miolo**. Há um
-  cache por data (`_CACHE`) para não repetir a chamada ao LLM a cada troca. `iniciar`
-  sobe o servidor e abre o navegador.
+- `app.py`: servidor HTTP da biblioteca padrão (`http.server`). Rotas: `/` (página),
+  `/conteudo` (parte rápida: métricas + gráficos), `/analise` (análise por LLM) e
+  `/noticias` (seção de notícias) — as duas últimas carregadas de forma assíncrona pela
+  página. Cada rota tem seu cache (`_CACHE`, `_CACHE_ANALISE`, `_CACHE_NOTICIAS`), para não
+  repetir a chamada ao LLM nem à rede. `iniciar` sobe o servidor e abre o navegador.
 - `main.py`: a CLI. `--construir-banco` roda o pipeline; `--agente "pergunta"` usa o
   agente ReAct; sem argumentos, sobe o servidor do relatório.
 - `make_diagram.py`: gera o `docs/arquitetura.pdf` (diagrama conceitual exigido).
